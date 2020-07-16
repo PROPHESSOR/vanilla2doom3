@@ -55,17 +55,17 @@ def buildBySectors():
 
         minborder, maxborder = getBorders(lines)
 
-        ps = [
-            (maxborder[0] - minborder[0]) / 2 + minborder[0],
-            (maxborder[1] - minborder[1]) / 2 + minborder[1],
-            floor,
-        ]
+        # ps = [
+        #     (maxborder[0] - minborder[0]) / 2 + minborder[0],
+        #     (maxborder[1] - minborder[1]) / 2 + minborder[1],
+        #     floor,
+        # ]
 
         for line in lines:
             brushes.append(generateSafeLine(line[0], line[1], (floor, ceil)))
 
-        brushes.append(generateRect3d((minborder[0], minborder[1], floor), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
-        # brushes.append(generateRect3d((minborder[0], minborder[1], ceil), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
+        brushes.append(generateRect3d((minborder[0], minborder[1], floor - 8), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
+        brushes.append(generateRect3d((minborder[0], minborder[1], ceil), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
 
         break # break after first sector to test
 
@@ -73,7 +73,7 @@ def buildBySectors():
     brushes.append(generateBox(0, 0, -16, 5000))
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, ps))
+        _out.write(generateMapFromBrushes(brushes, (1400, 1491, 8)))
 
 def getBorders(lines: list) -> list:
     ''' [(minx, miny), (maxx, maxy)] '''

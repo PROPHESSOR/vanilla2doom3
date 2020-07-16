@@ -1,6 +1,6 @@
 #!/usr/bin/python3.7
 
-TEXTURED = True
+TEXTURED = False
 
 def main():
     playerstart = (32, 32, 16)

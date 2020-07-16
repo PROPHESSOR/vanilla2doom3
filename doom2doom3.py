@@ -49,7 +49,12 @@ def buildBySectors():
 
         for sidedef in sector['sidedefs']:
             if not 'linedefs' in sidedef: continue
-            if sidedef['texMiddle'] == '-': continue
+            if sidedef['texMiddle'] == '-':
+                if sidedef['texLower'] != '-':
+                    pass # TODO: Generate block from {min} to floor
+                if sidedef['texUpper'] != '-':
+                    pass # TODO: Generate block from ceil to {max}
+                continue
 
             for linedef in sidedef['linedefs']:
                 lines.append(((linedef['vertex1'][0] + 2000, linedef['vertex1'][1] + 2000), (linedef['vertex2'][0] + 2000, linedef['vertex2'][1] + 2000)))
@@ -68,7 +73,7 @@ def buildBySectors():
         brushes.append(generateRect3d((minborder[0], minborder[1], floor - 8), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
         brushes.append(generateRect3d((minborder[0], minborder[1], ceil), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
 
-        break # break after first sector to test
+        # break # break after first sector to test
 
     # brushes.append(generateBox(pointMin[0], pointMin[1], heightMinMax[0], max(pointMax[0], pointMax[1], heightMinMax[1])))
     brushes.append(generateBox(0, 0, -16, 5000))

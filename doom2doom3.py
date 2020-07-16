@@ -49,6 +49,7 @@ def buildBySectors():
 
         for sidedef in sector['sidedefs']:
             if not 'linedefs' in sidedef: continue
+            if sidedef['texMiddle'] == '-': continue
 
             for linedef in sidedef['linedefs']:
                 lines.append(((linedef['vertex1'][0] + 2000, linedef['vertex1'][1] + 2000), (linedef['vertex2'][0] + 2000, linedef['vertex2'][1] + 2000)))

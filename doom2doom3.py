@@ -1,11 +1,11 @@
-from wadparser import parseLines, parseSectors
+from wadparser import parseLines, parseSectors, parsePlayerStart
 from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateBox
 
 def main():
     buildBySectors()
 
 def buildBySectors():
-    ps = [0, 0, 0]
+    ps = parsePlayerStart()
     sectors = parseSectors()
 
     safesectors = sectors
@@ -67,8 +67,12 @@ def buildBySectors():
         #     floor,
         # ]
 
+        i = 0
         for line in lines:
             brushes.append(generateSafeLine(line[0], line[1], (floor, ceil)))
+            print(line[0], line[1], (floor, ceil))
+            i+=1
+            # break
 
         brushes.append(generateRect3d((minborder[0], minborder[1], floor - 8), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
         brushes.append(generateRect3d((minborder[0], minborder[1], ceil), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
@@ -76,10 +80,10 @@ def buildBySectors():
         # break # break after first sector to test
 
     # brushes.append(generateBox(pointMin[0], pointMin[1], heightMinMax[0], max(pointMax[0], pointMax[1], heightMinMax[1])))
-    brushes.append(generateBox(0, 0, -16, 5000))
+    # brushes.append(generateBox(0, 0, -16, 5000))
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, (1400, 1491, 8)))
+        _out.write(generateMapFromBrushes(brushes, (ps[0] + 2000, ps[1] + 2000, 8)))
 
 def getBorders(lines: list) -> list:
     ''' [(minx, miny), (maxx, maxy)] '''
@@ -138,7 +142,7 @@ def buildByLines():
     brushes.append(generateBox(0, 0, -16, 5000))
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, (0, 0, 8)))
+        _out.write(generateMapFromBrushes(brushes, (1987, 2037, 8))) #(0, 0, 8)))
 
 if __name__ == "__main__":
     main()

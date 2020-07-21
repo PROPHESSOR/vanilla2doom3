@@ -160,5 +160,28 @@ def parseSectors() -> list:
 
     return sectors
 
+def parsePlayerStart() -> tuple:
+    things_stream = open('wad/THINGS.lmp', 'rb')
+    tngs = ByteTools(things_stream)
+    things = []
+
+    while True:
+        try:
+            things.append({
+                'x': tngs.parseInt16(),
+                'y': tngs.parseInt16(),
+                'angle': tngs.parseInt16(),
+                'type': tngs.parseInt16(),
+                'flags': tngs.parseInt16(),
+            })
+        except IOError:
+            break
+
+    for thing in things:
+        if thing['type'] == 1:
+            return (thing['x'], thing['y'])
+
+    return (None, None)
+
 if __name__ == "__main__":
     main()

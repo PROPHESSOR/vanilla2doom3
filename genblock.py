@@ -108,7 +108,7 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8):
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent)
 
-def generateRect3d(position: tuple, size: tuple, indent=4) -> str:
+def generateRect3d(position: tuple, size: tuple, indent=4, comment=None) -> str:
     x, y, z = position
     width, depth, height = size
 
@@ -119,17 +119,10 @@ def generateRect3d(position: tuple, size: tuple, indent=4) -> str:
     front = (0, -1, 0, y)
     back = (0, 1, 0, -(y + depth))
 
-    return generateBrushDef3((bottom, top, left, right, front, back), f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
+    return generateBrushDef3((bottom, top, left, right, front, back), comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 
 def generateCube(x, y, z, size, indent=4) -> str:
-    bottom = (0, 0, -1, z)
-    top = (0, 0, 1, -(z + size))
-    front = (0, -1, 0, y)
-    right = (1, 0, 0, -(x + size)   )
-    back = (0, 1, 0, -(y + size))
-    left = (-1, 0, 0, x)
-
-    return generateBrushDef3((bottom, top, front, right, back, left), f'// cube({x}, {y}, {z}, {size})', indent=indent)
+    return generateRect3d((x, y, z), (size, size, size), indent=indent, comment=f'// cube({x}, {y}, {z}, {size})')
 
 def generateBox(x, y, z, size, width=8, indent=4) -> str:
     brushes = [

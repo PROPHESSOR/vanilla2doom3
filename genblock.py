@@ -28,6 +28,18 @@ def main():
         generateLine((0, 0), (32, 0), (8, 16)),
         generateLine((0, 0), (32, 32), (16, 24)),
         generateLine((64, 64), (128, 128)),
+        generateLine((128, 128), (64, 64), (16, 24)),
+        generateLine((128, 64), (64, 128), (8, 16)),
+
+        generatePoint((0, 0), -64),
+        generatePoint((64, 0), -64),
+        generatePoint((64, 64), -64),
+        generatePoint((0, 64), -64),
+        generatePoint((-64, 0), -64),
+        generatePoint((-64, -64), -64),
+        generatePoint((0, -64), -64),
+        generatePoint((-64, 64), -64),
+        generatePoint((64, -64), -64),
     ]
 
     with open('generated.map', 'w') as _out:
@@ -76,7 +88,12 @@ def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8)
         return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
     else: raise Exception('Not a safe line')
 
-def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8): # FIXME:
+def generatePoint(v:tuple, height:float, indent=4, width=4):
+    return generateCube(v[0] - width / 2, v[1] - width / 2, height - width / 2, width)
+
+def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8):
+    return generatePoint(v1, height[0]) + generatePoint(v2, height[1])
+    if v1[0] > v2[0]: v1, v2 = v2, v1
     x1, y1 = v1
     x2, y2 = v2
 
@@ -84,10 +101,10 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8): # 
 
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])
-    left = (*dir.invert().tuple(), 0, x1)
-    right = (*dir.tuple(), 0, -x2)
-    front = (*dir.normal().tuple(), 0, y1)
-    back = (*dir.normal().invert().tuple(), 0, -y1 - width)
+    left = (*dir.invert().tuple(), 0, x1 + width / 2)
+    right = (*dir.tuple(), 0, -x2 - width / 2)
+    front = (*dir.normal().tuple(), 0, y1 + width / 2)
+    back = (*dir.normal().invert().tuple(), 0, -y2 - width / 2)
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent)
 

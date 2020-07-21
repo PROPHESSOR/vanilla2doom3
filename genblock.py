@@ -2,9 +2,11 @@
 
 from geometry import *
 
-TEXTURED = False
+TEXTURED = True
 
 def main():
+    global TEXTURED
+    TEXTURED = False
     playerstart = (32, 32, 16)
 
     brushes = [
@@ -26,22 +28,25 @@ def main():
 
         # generateLine((0, 0), (32, 32)),
 
-        generateSafeLine((0, 0), (32, 0)),
-        generateLine((0, 0), (32, 0), (8, 16)),
-        generateLine((0, 0), (32, 32), (16, 24)),
-        generateLine((64, 64), (128, 128)),
-        generateLine((128, 128), (64, 64), (16, 24)),
-        generateLine((128, 64), (64, 128), (8, 16)),
+        # generateSafeLine((0, 0), (32, 0)),
+        # generateLine((0, 0), (32, 0), (8, 16)),
+        # generateLine((0, 0), (32, 32), (16, 24)),
+        # generateLine((64, 64), (128, 128)),
+        # generateLine((128, 128), (64, 64), (16, 24)),
+        # generateLine((128, 64), (64, 128), (8, 16)),
 
-        generatePoint((0, 0), -64),
-        generatePoint((64, 0), -64),
-        generatePoint((64, 64), -64),
-        generatePoint((0, 64), -64),
-        generatePoint((-64, 0), -64),
-        generatePoint((-64, -64), -64),
-        generatePoint((0, -64), -64),
-        generatePoint((-64, 64), -64),
-        generatePoint((64, -64), -64),
+        # generatePoint((0, 0), -64),
+        # generatePoint((64, 0), -64),
+        # generatePoint((64, 64), -64),
+        # generatePoint((0, 64), -64),
+        # generatePoint((-64, 0), -64),
+        # generatePoint((-64, -64), -64),
+        # generatePoint((0, -64), -64),
+        # generatePoint((-64, 64), -64),
+        # generatePoint((64, -64), -64),
+
+        generateLine((64, 64), (2000, 2000), drawpoints=True),
+        generateLine((2000, 2000), (2256, 2256), (16, 24), drawpoints=True),
     ]
 
     with open('generated.map', 'w') as _out:
@@ -105,14 +110,16 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, dra
 
     dir = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
 
+    compensation = dir.tuple()[0] or 1 # 0.x normal compensation for length
+
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])
-    left = (*dir.invert().tuple(), 0, x1)
-    right = (*dir.tuple(), 0, -x2)
+    left = (*dir.invert().tuple(), 0, x1 / compensation) 
+    right = (*dir.tuple(), 0, -(x2 / compensation))
     front = (*dir.normal().tuple(), 0, 0)
     back = (*dir.normal().invert().tuple(), 0, -width)
 
-    return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + (generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else ''
+    return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 
 def generateRect3d(position: tuple, size: tuple, indent=4, comment=None) -> str:
     x, y, z = position

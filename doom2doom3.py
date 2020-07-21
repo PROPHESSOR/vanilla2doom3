@@ -1,5 +1,5 @@
 from wadparser import parseLines, parseSectors, parsePlayerStart
-from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateBox
+from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox
 
 def main():
     buildBySectors()
@@ -69,8 +69,7 @@ def buildBySectors():
 
         i = 0
         for line in lines:
-            brushes.append(generateSafeLine(line[0], line[1], (floor, ceil)))
-            print(line[0], line[1], (floor, ceil))
+            brushes.append(generateLine(line[0], line[1], (floor, ceil), drawpoints=False))
             i+=1
             # break
 
@@ -80,7 +79,7 @@ def buildBySectors():
         # break # break after first sector to test
 
     # brushes.append(generateBox(pointMin[0], pointMin[1], heightMinMax[0], max(pointMax[0], pointMax[1], heightMinMax[1])))
-    # brushes.append(generateBox(0, 0, -16, 5000))
+    brushes.append(generateBox(0, 0, -16, 5000))
 
     with open('doom2doom3.map', 'w') as _out:
         _out.write(generateMapFromBrushes(brushes, (ps[0] + 2000, ps[1] + 2000, 8)))

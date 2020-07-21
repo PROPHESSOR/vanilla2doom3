@@ -50,11 +50,11 @@ def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4):
     if v1[0] == v2[0]: # vertical
         if v2[1] < v1[1]: v1, v2 = v2, v1
         sizex = 8
-        sizey = v2[1] - v1[1] + 8
+        sizey = v2[1] - v1[1]# + 8
         return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
     elif v1[1] == v2[1]: # horizontal
         if v2[0] < v1[0]: v1, v2 = v2, v1
-        sizex = v2[0] - v1[0] + 8
+        sizex = v2[0] - v1[0]# + 8
         sizey = 8
         return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
     else: raise Exception('Not a safe line')

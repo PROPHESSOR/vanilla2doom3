@@ -1,6 +1,8 @@
 #!/usr/bin/python3.7
 
-TEXTURED = True
+from geometry import *
+
+TEXTURED = False
 
 def main():
     playerstart = (32, 32, 16)
@@ -18,14 +20,29 @@ def main():
         # generateSafeLine((0, 0), (0, 64)),
         # generateSafeLine((0, 0), (64, 0)),
 
-        generateBox(0, 0, 0, 256),
+        # generateBox(0, 0, 0, 256),
+
+        # generateLine((0, 0), (32, 32)),
+
+        generateSafeLine((0, 0), (32, 0)),
+        generateLine((0, 0), (32, 0), (8, 16)),
+        generateLine((0, 0), (32, 32), (16, 24)),
+        generateLine((64, 64), (128, 128)),
     ]
 
     with open('generated.map', 'w') as _out:
         _out.write(generateMapFromBrushes(brushes, playerstart))
 
+def prettyNymber(x):
+    x = float(x)
+    if x == 0: return 0
+
+    if x.is_integer(): return int(x)
+
+    return round(x, 6)
+
 def getPlaneString(x: int, y: int, z: int, distance: int) -> str:
-    return f'( {x} {y} {z} {distance} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "_none"}" 0 0 0'
+    return f'( {prettyNymber(x)} {prettyNymber(y)} {prettyNymber(z)} {prettyNymber(distance)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "_none"}" 0 0 0'
 
 def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     ''' generatesBrushDef3 from 6 *brushes* (normalx, normaly, normalz, distancefromorigin) '''
@@ -46,31 +63,33 @@ def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
 
     return ' ' * indent + ('\n' + ' ' * indent).join(lines)
 
-def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4):
+def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8):
     if v1[0] == v2[0]: # vertical
         if v2[1] < v1[1]: v1, v2 = v2, v1
-        sizex = 8
+        sizex = width
         sizey = v2[1] - v1[1]# + 8
         return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
     elif v1[1] == v2[1]: # horizontal
         if v2[0] < v1[0]: v1, v2 = v2, v1
         sizex = v2[0] - v1[0]# + 8
-        sizey = 8
+        sizey = width
         return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
     else: raise Exception('Not a safe line')
 
-def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4): # FIXME:
+def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8): # FIXME:
     x1, y1 = v1
     x2, y2 = v2
 
+    dir = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
+
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])
-    front = (0, -1, 0, y1)
-    right = (1, 0, 0, -x2)
-    back = (0, 1, 0, -y2)
-    left = (-1, 0, 0, x1)
+    left = (*dir.invert().tuple(), 0, x1)
+    right = (*dir.tuple(), 0, -x2)
+    front = (*dir.normal().tuple(), 0, y1)
+    back = (*dir.normal().invert().tuple(), 0, -y1 - width)
 
-    return generateBrushDef3((bottom, top, front, right, back, left), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent)
+    return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent)
 
 def generateRect3d(position: tuple, size: tuple, indent=4) -> str:
     x, y, z = position
@@ -78,12 +97,12 @@ def generateRect3d(position: tuple, size: tuple, indent=4) -> str:
 
     bottom = (0, 0, -1, z)
     top = (0, 0, 1, -(z + height))
-    front = (0, -1, 0, y)
-    right = (1, 0, 0, -(x + width))
-    back = (0, 1, 0, -(y + depth))
     left = (-1, 0, 0, x)
+    right = (1, 0, 0, -(x + width))
+    front = (0, -1, 0, y)
+    back = (0, 1, 0, -(y + depth))
 
-    return generateBrushDef3((bottom, top, front, right, back, left), f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
+    return generateBrushDef3((bottom, top, left, right, front, back), f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 
 def generateCube(x, y, z, size, indent=4) -> str:
     bottom = (0, 0, -1, z)

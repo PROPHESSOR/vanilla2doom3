@@ -9,6 +9,8 @@ def main():
     TEXTURED = False
     playerstart = (32, 32, 16)
 
+    X = 0
+
     brushes = [
         generatePoint((0, 0), 0, width=2), # Zero point
 
@@ -59,15 +61,15 @@ def main():
         # generateLine((4096, 2048), (4096, 1024), (-10, -9), drawpoints=True),
         # generateLine((4096, 1024), (2048, 1024), (-10, -9), drawpoints=True),
 
-        generateSafeLine((0, 0), (0, 256), (128, 129)),
-        generateSafeLine((0, 256), (256, 256), (128, 129)),
-        generateSafeLine((256, 256), (256, 0), (128, 129)),
-        generateSafeLine((256, 0), (0, 0), (128, 129)),
+        generateSafeLine((X + 0, X + 0), (X + 0, X + 256), (X + 128, X + 129)),
+        generateSafeLine((X + 0, X + 256), (X + 256, X + 256), (X + 128, X + 129)),
+        generateSafeLine((X + 256, X + 256), (X + 256, X + 0), (X + 128, X + 129)),
+        generateSafeLine((X + 256, X + 0), (X + 0, X + 0), (X + 128, X + 129)),
 
-        generateLine((0, 0), (0, 256), (64, 65), drawpoints=True),
-        generateLine((0, 256), (256, 256), (64, 65), drawpoints=True),
-        generateLine((256, 256), (256, 0), (64, 65), drawpoints=True),
-        generateLine((256, 0), (0, 0), (64, 65), drawpoints=True),
+        generateLine((X + 0, X + 0), (X + 0, X + 256), (X + 64, X + 65), drawpoints=False),
+        generateLine((X + 0, X + 256), (X + 256, X + 256), (X + 64, X + 65), drawpoints=False),
+        generateLine((X + 256, X + 256), (X + 256, X + 0), (X + 64, X + 65), drawpoints=False),
+        generateLine((X + 256, X + 0), (X + 0, X + 0), (X + 64, X + 65), drawpoints=False),
     ]
 
     with open('generated.map', 'w') as _out:
@@ -119,26 +121,40 @@ def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8)
 def generatePoint(v:tuple, height:float, indent=4, width=4):
     return generateCube(v[0] - width / 2, v[1] - width / 2, height - width / 2, width)
 
+def _firstprart(value, width, compensation): return value / compensation - width / 2
+def _secondprart(value, width, compensation): return -(value / compensation + width / 2)
+
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
     # if v1[0] > v2[0] or v1[1] > v2[1]: v1, v2 = v2, v1
     x1, y1 = v1
     x2, y2 = v2
 
-    # x1 = min(v1[0], v2[0])
-    # x2 = max(v1[0], v2[0])
-    # y1 = min(v1[1], v2[1])
-    # y2 = max(v1[1], v2[1])
-
     dir = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
+
+    # FIXME: Crutch
+    if dir.y:
+        x1, y1 = y1, x1
+        x2, y2 = y2, x2
 
     compensation = dir.tuple()[0] or 1 # 0.x normal compensation for length
 
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])
-    left = (*dir.invert().tuple(), 0, x1 / compensation) 
-    right = (*dir.tuple(), 0, -(x2 / compensation))
-    front = (*dir.normal().tuple(), 0, y1 - width / 2)
-    back = (*dir.normal().invert().tuple(), 0, -(y1 + width / 2))
+    left = (*dir.invert().tuple(),          0, _firstprart(x1, width, compensation)) 
+    right = (*dir.tuple(),                  0, _secondprart(x2, width, compensation))
+    front = (*dir.normal().tuple(),         0, _firstprart(y1, width, compensation))
+    back = (*dir.normal().invert().tuple(), 0, _secondprart(y2, width, compensation))
+
+    from pprint import pprint
+
+    pprint(('##', v1, v2))
+    print(dir.string())
+    pprint(bottom)
+    pprint(top)
+    pprint(left)
+    pprint(right)
+    pprint(front)
+    pprint(back)
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 

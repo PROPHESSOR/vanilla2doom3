@@ -53,6 +53,9 @@ class Vec2():
     def tuple(self) -> tuple:
         return (self.x, self.y)
 
+    def string(self) -> str:
+        return f'Vec2({self.x}, {self.y})'
+
     @staticmethod
     def getDirectionFromPoints(x1, y1, x2, y2):
         return Vec2(x2 - x1, y2 - y1).normalize()
@@ -78,3 +81,6 @@ class Vec3():
 
     def tuple(self) -> tuple:
         return (self.x, self.y, self.z)
+
+    def string(self) -> str:
+        return f'Vec3({self.x}, {self.y}, {self.z})'

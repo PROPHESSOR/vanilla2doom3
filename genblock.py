@@ -129,32 +129,18 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, dra
     x1, y1 = v1
     x2, y2 = v2
 
-    dir = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
-
-    # FIXME: Crutch
-    if dir.y:
-        x1, y1 = y1, x1
-        x2, y2 = y2, x2
+    linevector = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
+    dir = linevector.normalize() # line direction
+    length = linevector.length() # line length
 
     compensation = dir.tuple()[0] or 1 # 0.x normal compensation for length
 
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])
-    left = (*dir.invert().tuple(),          0, _firstprart(x1, width, compensation)) 
-    right = (*dir.tuple(),                  0, _secondprart(x2, width, compensation))
-    front = (*dir.normal().tuple(),         0, _firstprart(y1, width, compensation))
-    back = (*dir.normal().invert().tuple(), 0, _secondprart(y2, width, compensation))
-
-    from pprint import pprint
-
-    pprint(('##', v1, v2))
-    print(dir.string())
-    pprint(bottom)
-    pprint(top)
-    pprint(left)
-    pprint(right)
-    pprint(front)
-    pprint(back)
+    left = (*dir.invert().tuple(),          0, -x1-width / 2) 
+    right = (*dir.tuple(),                  0, -(length + width / 2 - x1))
+    front = (*dir.normal().tuple(),         0, y1-width / 2)
+    back = (*dir.normal().invert().tuple(), 0, -(y1 + width / 2))
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 

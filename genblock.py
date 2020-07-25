@@ -2,22 +2,22 @@
 
 from geometry import *
 
-TEXTURED = True
+TEXTURED = False
 
 def main():
     global TEXTURED
     TEXTURED = False
     playerstart = (32, 32, 16)
 
-    X = 0
+    testoffset = 128
 
     brushes = [
-        generatePoint((0, 0), 0, width=2), # Zero point
+        generatePoint((testoffset + 0, testoffset + 0), 0, width=2), # Zero point
 
         # XYZ
-        generateSafeLine((0, 0), (32, 0), (0, 1)), # X
-        generateSafeLine((0, 0), (0, 16), (0, 1)), # Y
-        generateSafeLine((0, 0), (8, 0), (0, 32)), # Z
+        generateSafeLine((testoffset + 0, testoffset + 0), (testoffset + 32, testoffset + 0), (0, 1)), # X
+        generateSafeLine((testoffset + 0, testoffset + 0), (testoffset + 0, testoffset + 16), (0, 1)), # Y
+        generateSafeLine((testoffset + 0, testoffset + 0), (testoffset + 8, testoffset + 0), (0, 32)), # Z
 
         # generateRect3d((-64, -64, -8), (128, 128, 8)), #bottom
         # generateRect3d((-64 - 8, -64, 0), (8, 128, 128)), #left (player back)
@@ -61,15 +61,31 @@ def main():
         # generateLine((4096, 2048), (4096, 1024), (-10, -9), drawpoints=True),
         # generateLine((4096, 1024), (2048, 1024), (-10, -9), drawpoints=True),
 
-        generateSafeLine((X + 0, X + 0), (X + 0, X + 256), (X + 128, X + 129)),
-        generateSafeLine((X + 0, X + 256), (X + 256, X + 256), (X + 128, X + 129)),
-        generateSafeLine((X + 256, X + 256), (X + 256, X + 0), (X + 128, X + 129)),
-        generateSafeLine((X + 256, X + 0), (X + 0, X + 0), (X + 128, X + 129)),
+        # generateSafeLine((testoffset + 0, testoffset + 0), (testoffset + 0, testoffset + 256), (128, 129)),
+        # generateSafeLine((testoffset + 0, testoffset + 256), (testoffset + 256, testoffset + 256), (128, 129)),
+        # generateSafeLine((testoffset + 256, testoffset + 256), (testoffset + 256, testoffset + 0), (128, 129)),
+        # generateSafeLine((testoffset + 256, testoffset + 0), (testoffset + 0, testoffset + 0), (128, 129)),
 
-        generateLine((X + 0, X + 0), (X + 0, X + 256), (X + 64, X + 65), drawpoints=False),
-        generateLine((X + 0, X + 256), (X + 256, X + 256), (X + 64, X + 65), drawpoints=False),
-        generateLine((X + 256, X + 256), (X + 256, X + 0), (X + 64, X + 65), drawpoints=False),
-        generateLine((X + 256, X + 0), (X + 0, X + 0), (X + 64, X + 65), drawpoints=False),
+        # generateLine((testoffset + 0, testoffset + 0), (testoffset + 0, testoffset + 256), (64, 65), drawpoints=False),
+        # generateLine((testoffset + 0, testoffset + 256), (testoffset + 256, testoffset + 256), (64, 65), drawpoints=False),
+        # generateLine((testoffset + 256, testoffset + 256), (testoffset + 256, testoffset + 0), (64, 65), drawpoints=False),
+        # generateLine((testoffset + 256, testoffset + 0), (testoffset + 0, testoffset + 0), (64, 65), drawpoints=False),
+
+        # generateLine((0, 0), (256, 256), (64, 65), drawpoints=False),
+        # generateLine((256, 0), (0, 256), (64, 65), drawpoints=False),
+
+        # generateRectBy4Points((0, 0), (128, 0), (128, 128), (0, 128)),
+        # generateRectBy4Points((0, 0), (64, 0), (128, 128), (0, 128)),
+
+        # generateLine((64, 64), (128, 64), (512, 513)),
+
+        generateRectBy4Points(
+            (testoffset + 64 - 4, testoffset + 64 + 4),
+            (testoffset + 128 + 4, testoffset + 64 + 4),
+            (testoffset + 128 + 4, testoffset + 64 - 4),
+            (testoffset + 64 - 4, testoffset + 64 - 4),
+            (500, 501)
+        ),
     ]
 
     with open('generated.map', 'w') as _out:
@@ -125,6 +141,12 @@ def _firstprart(value, width, compensation): return value / compensation - width
 def _secondprart(value, width, compensation): return -(value / compensation + width / 2)
 
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
+    return generateRectBy4Points(
+        (v1[0] - width / 2, v1[1] + width / 2), # top left
+        (v2[0] + width / 2, v2[1] + width / 2), # top right
+        (v2[0] + width / 2, v2[1] - width / 2), # bottom right
+        (v1[0] - width / 2, v1[1] - width / 2), # bottom left
+        height)
     # if v1[0] > v2[0] or v1[1] > v2[1]: v1, v2 = v2, v1
     x1, y1 = v1
     x2, y2 = v2
@@ -144,6 +166,26 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, dra
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 
+def generateRectBy4Points(p1:tuple, p2:tuple, p3:tuple, p4:tuple, height:tuple=(0, 8), comment=None, indent=4):
+    '''
+    p1  p2
+    p4  p3
+    '''
+
+    leftnormal = Vec2.getDirectionFromPoints(*p1, *p4).normalize().rotate(90).tuple()
+    rightnormal = Vec2.getDirectionFromPoints(*p3, *p2).normalize().rotate(90).tuple()
+    frontnormal = Vec2.getDirectionFromPoints(*p1, *p2).normalize().rotate(90).tuple()
+    backnormal = Vec2.getDirectionFromPoints(*p3, *p4).normalize().rotate(90).tuple()
+
+    bottom = (0, 0, -1, height[0])
+    top = (0, 0, 1, -height[1])
+    left = (*leftnormal, 0, (p1[0] + p4[0]) / 2)
+    right = (*rightnormal, 0, -((p2[0] + p3[0]) / 2))
+    front = (*frontnormal, 0, (p1[1] + p2[1]) / 2)
+    back = (*backnormal, 0, -((p4[1] + p3[1]) / 2))
+
+    return generateBrushDef3((bottom, top, left, right, front, back), comment if comment else f'// RectPoints(...)', indent=indent)
+
 def generateRect3d(position: tuple, size: tuple, indent=4, comment=None) -> str:
     x, y, z = position
     width, depth, height = size
@@ -158,16 +200,16 @@ def generateRect3d(position: tuple, size: tuple, indent=4, comment=None) -> str:
     return generateBrushDef3((bottom, top, left, right, front, back), comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 
 def generateCube(x, y, z, size, indent=4) -> str:
-    return generateRect3d((x, y, z), (size, size, size), indent=indent, comment=f'// cube({x}, {y}, {z}, {size})')
+    return generateRect3d((x, y, z), (size, size, size), indent=indent, comment=f'// Cube({x}, {y}, {z}, {size})')
 
 def generateBox(x, y, z, size, width=8, indent=4) -> str:
     brushes = [
         generateRect3d((x, y, z - width), (size, size, width)), #bottom
-        generateRect3d((x - width, y, z), (width, size, size)), #left (player back)
-        generateRect3d((x, y - width, z), (size, width, size)), #front (player right)
-        generateRect3d((x + size, y, z), (width, size, size)), #right (player front)
-        generateRect3d((x, y + size, z), (size, width, size)), #back (player left)
         generateRect3d((x, y, z + size), (size, size, width)), #top
+        generateRect3d((x - width, y, z), (width, size, size)), #left (player back)
+        generateRect3d((size, y, z), (width, size, size)), #right (player front)
+        generateRect3d((x, y - width, z), (size, width, size)), #front (player right)
+        generateRect3d((x, y + size, z), (size, width, size)), #back (player left)
     ]
 
     return '\n'.join(brushes)

@@ -9,7 +9,7 @@ def main():
     TEXTURED = False
     playerstart = (32, 32, 16)
 
-    testoffset = 128
+    testoffset = 0
 
     brushes = [
         generatePoint((testoffset + 0, testoffset + 0), 0, width=2), # Zero point
@@ -78,15 +78,15 @@ def main():
         # generateRectBy4Points((0, 0), (64, 0), (128, 128), (0, 128)),
 
         # Check Y-directed line
-        generateLine((64, 64), (64, 128), (512, 513), drawpoints=True),
-        generateSafeLine((64, 64), (64, 128), (513, 514)),
+        generateLine((0, 0), (0, 128), (512, 513), drawpoints=True),
+        # generateSafeLine((0, 0), (0, 128), (513, 514)),
 
         # Check X-directed line
-        generateLine((64, 64), (128, 64), (512, 513), drawpoints=True),
-        generateSafeLine((64, 64), (128, 64), (513, 514)),
+        generateLine((0, 0), (128, 0), (512, 513), drawpoints=True),
+        # generateSafeLine((0, 0), (128, 0), (513, 514)),
 
         # Check diagonal line
-        generateLine((64, 64), (128, 128), (512, 513), drawpoints=True),
+        generateLine((0, 0), (128, 128), (512, 513), drawpoints=True),
 
         # generateRectBy4Points(
         #     (testoffset + 64 - 4, testoffset + 64 + 4),
@@ -157,25 +157,18 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, dra
     dir = linevector.normalize() # line direction
     length = linevector.length() # line length
 
-    out = []
+    compensation = Vec2(*v1).length() or 1 # 0.x normal compensation for length
 
-    number = 25
+    px = x1
+    py = x1
 
-    step = length / number
-
-    for i in range(1, number + 1):
-        out.append(generatePoint((x1 + dir.x * step * i, y1 + dir.y * step * i), height[0]))
-
-    return '\n'.join(out)
-
-    compensation = dir.tuple()[0] or 1 # 0.x normal compensation for length
-
+    # Local space of line (left -> right)
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])
-    left = (*dir.invert().tuple(),          0, -x1-width / 2) 
-    right = (*dir.tuple(),                  0, -(length + width / 2 - x1))
-    front = (*dir.normal().tuple(),         0, y1-width / 2)
-    back = (*dir.normal().invert().tuple(), 0, -(y1 + width / 2))
+    left = (*dir.invert().tuple(),          0, linevector.x) 
+    right = (*dir.tuple(),                  0, -(length + width / 2))
+    front = (*dir.normal().tuple(),         0, -width / 2)      # Half of thickness.
+    back = (*dir.normal().invert().tuple(), 0, -(width / 2))    # Half of thickness.
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 

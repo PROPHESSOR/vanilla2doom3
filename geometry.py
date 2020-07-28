@@ -21,6 +21,12 @@ class Vec2():
         self.x = x
         self.y = y
 
+    def __repr__(self):
+        return f'Vec2({self.x}, {self.y})'
+    
+    def __str__(self):
+        return f'Vec2({self.x}, {self.y})'
+
     def add(self, x, y):
         return Vec2(self.x + x, self.y + y)
 
@@ -58,7 +64,7 @@ class Vec2():
 
     @staticmethod
     def getDirectionFromPoints(x1, y1, x2, y2):
-        return Vec2(x2 - x1, y2 - y1).normalize()
+        return Vec2(x2 - x1, y2 - y1)
 
 class Vec3():
     def __init__(self, x, y, z):

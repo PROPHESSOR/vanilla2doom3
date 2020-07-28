@@ -82,15 +82,15 @@ def main():
         # generateRectBy4Points((0, 0), (64, 0), (128, 128), (0, 128)),
 
         # Check Y-directed line
-        # generateLine((0, 0), (0, 128), (512, 513), drawpoints=True),
-        # generateSafeLine((0, 0), (0, 128), (513, 514)),
+        generateLine((64, 64), (64, 128), (512, 513), drawpoints=True),
+        generateSafeLine((64, 64), (64, 128), (513, 514)),
 
         # Check X-directed line
-        # generateLine((0, 0), (128, 0), (512, 513), drawpoints=True),
-        # generateSafeLine((0, 0), (128, 0), (513, 514)),
+        generateLine((64, 64), (128, 64), (512, 513), drawpoints=True),
+        generateSafeLine((64, 64), (128, 64), (513, 514)),
 
         # Check diagonal line
-        # generateLine((0, 0), (128, 128), (512, 513), drawpoints=True),
+        generateLine((64, 64), (128, 128), (512, 513), drawpoints=True),
 
         # generateRectBy4Points(
         #     (testoffset + 64 - 4, testoffset + 64 + 4),
@@ -156,25 +156,12 @@ def _secondprart(value, width, compensation): return -(value / compensation + wi
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
     x1, y1 = v1
     x2, y2 = v2
-
+    
     linevector = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
-    dir = linevector.normalize() # line direction
+    dir = linevector.normalize()
     length = linevector.length() # line length
 
-    compensation = Vec2(*v1).length() or 1 # 0.x normal compensation for length
-
-    px = x1
-    py = x1
-
-    # Local space of line (left -> right)
-    bottom = (0, 0, -1, height[0])
-    top = (0, 0, 1, -height[1])
-    left = (*dir.invert().tuple(),          0, linevector.x) 
-    right = (*dir.tuple(),                  0, -(length + width / 2))
-    front = (*dir.normal().tuple(),         0, -width / 2)      # Half of thickness.
-    back = (*dir.normal().invert().tuple(), 0, -(width / 2))    # Half of thickness.
-
-    return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
+    return generateRect3d((x1, y1, height[0]), (length, width, height[1] - height[0]), rotation=dir.rotation()) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 
 def sortPointsTopLeftClockwise(p1:tuple, p2:tuple, p3:tuple, p4:tuple) -> tuple:
     values = set()
@@ -219,8 +206,8 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
     width, depth, height = size
 
     # Move center point to the origin
-    x += width / 2
-    y += depth / 2
+    # x += width / 2
+    # y += depth / 2
 
     # Rotate around the origin
     X = Vec2(1.0, 0).rotate(rotation)
@@ -229,8 +216,8 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
     x, y = Vec2(x, y).rotate(-rotation).tuple()
 
     # Move back to the base point
-    x -= width / 2
-    y -= depth / 2
+    # x -= width / 2
+    # y -= depth / 2
 
     bottom = (0, 0, -1, z)
     top = (0, 0, 1, -(z + height))

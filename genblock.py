@@ -77,15 +77,24 @@ def main():
         # generateRectBy4Points((0, 0), (128, 0), (128, 128), (0, 128)),
         # generateRectBy4Points((0, 0), (64, 0), (128, 128), (0, 128)),
 
-        # generateLine((64, 64), (128, 64), (512, 513)),
+        # Check Y-directed line
+        generateLine((64, 64), (64, 128), (512, 513), drawpoints=True),
+        generateSafeLine((64, 64), (64, 128), (513, 514)),
 
-        generateRectBy4Points(
-            (testoffset + 64 - 4, testoffset + 64 + 4),
-            (testoffset + 128 + 4, testoffset + 64 + 4),
-            (testoffset + 128 + 4, testoffset + 64 - 4),
-            (testoffset + 64 - 4, testoffset + 64 - 4),
-            (500, 501)
-        ),
+        # Check X-directed line
+        generateLine((64, 64), (128, 64), (512, 513), drawpoints=True),
+        generateSafeLine((64, 64), (128, 64), (513, 514)),
+
+        # Check diagonal line
+        generateLine((64, 64), (128, 128), (512, 513), drawpoints=True),
+
+        # generateRectBy4Points(
+        #     (testoffset + 64 - 4, testoffset + 64 + 4),
+        #     (testoffset + 128 + 4, testoffset + 64 + 4),
+        #     (testoffset + 128 + 4, testoffset + 64 - 4),
+        #     (testoffset + 64 - 4, testoffset + 64 - 4),
+        #     (256, 260)
+        # ),
     ]
 
     with open('generated.map', 'w') as _out:
@@ -142,11 +151,11 @@ def _secondprart(value, width, compensation): return -(value / compensation + wi
 
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
     return generateRectBy4Points(
-        (v1[0] - width / 2, v1[1] + width / 2), # top left
-        (v2[0] + width / 2, v2[1] + width / 2), # top right
-        (v2[0] + width / 2, v2[1] - width / 2), # bottom right
-        (v1[0] - width / 2, v1[1] - width / 2), # bottom left
-        height)
+        (v1[0] - width / 2, v1[1] - width / 2), # top left
+        (v2[0] + width / 2, v1[1] - width / 2), # top right
+        (v2[0] + width / 2, v2[1] + width / 2), # bottom right
+        (v1[0] - width / 2, v2[1] + width / 2), # bottom left
+        height) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
     # if v1[0] > v2[0] or v1[1] > v2[1]: v1, v2 = v2, v1
     x1, y1 = v1
     x2, y2 = v2
@@ -174,8 +183,8 @@ def generateRectBy4Points(p1:tuple, p2:tuple, p3:tuple, p4:tuple, height:tuple=(
 
     leftnormal = Vec2.getDirectionFromPoints(*p1, *p4).normalize().rotate(90).tuple()
     rightnormal = Vec2.getDirectionFromPoints(*p3, *p2).normalize().rotate(90).tuple()
-    frontnormal = Vec2.getDirectionFromPoints(*p1, *p2).normalize().rotate(90).tuple()
-    backnormal = Vec2.getDirectionFromPoints(*p3, *p4).normalize().rotate(90).tuple()
+    frontnormal = Vec2.getDirectionFromPoints(*p1, *p2).normalize().rotate(90).invert().tuple()
+    backnormal = Vec2.getDirectionFromPoints(*p3, *p4).normalize().rotate(90).invert().tuple()
 
     bottom = (0, 0, -1, height[0])
     top = (0, 0, 1, -height[1])

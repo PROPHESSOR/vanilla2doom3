@@ -25,7 +25,11 @@ def main():
         # generateCube(64, -64, 0, 128), #right (player front)
         # generateCube(-64, 64, 0, 128), #back (player left)
         # generateRect3d((-64, -64, 128), (128, 128, 8)), #top
-        # generateRect3d((256, 256, 256), (128, 128, 1)),
+        generateRect3d((256, 256, 256), (128, 128, 1)),
+        generateRect3d((256, 256, 270), (128, 128, 1), rotation=45),
+
+        generatePoint((256, 256), 256),
+        generatePoint((256 + 128, 256 + 128), 256),
 
         # generateSafeLine((8, 8), (8, 16)),
         # generateSafeLine((0, 0), (0, 64)),
@@ -78,15 +82,15 @@ def main():
         # generateRectBy4Points((0, 0), (64, 0), (128, 128), (0, 128)),
 
         # Check Y-directed line
-        generateLine((0, 0), (0, 128), (512, 513), drawpoints=True),
+        # generateLine((0, 0), (0, 128), (512, 513), drawpoints=True),
         # generateSafeLine((0, 0), (0, 128), (513, 514)),
 
         # Check X-directed line
-        generateLine((0, 0), (128, 0), (512, 513), drawpoints=True),
+        # generateLine((0, 0), (128, 0), (512, 513), drawpoints=True),
         # generateSafeLine((0, 0), (128, 0), (513, 514)),
 
         # Check diagonal line
-        generateLine((0, 0), (128, 128), (512, 513), drawpoints=True),
+        # generateLine((0, 0), (128, 128), (512, 513), drawpoints=True),
 
         # generateRectBy4Points(
         #     (testoffset + 64 - 4, testoffset + 64 + 4),
@@ -210,16 +214,30 @@ def generateRectBy4Points(p1:tuple, p2:tuple, p3:tuple, p4:tuple, height:tuple=(
 
     return generateBrushDef3((bottom, top, left, right, front, back), comment if comment else f'// RectPoints(...)', indent=indent)
 
-def generateRect3d(position: tuple, size: tuple, indent=4, comment=None) -> str:
+def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation:int=0) -> str:
     x, y, z = position
     width, depth, height = size
 
+    # Move center point to the origin
+    x += width / 2
+    y += depth / 2
+
+    # Rotate around the origin
+    X = Vec2(1.0, 0).rotate(rotation)
+
+    # Compensate rotation
+    x, y = Vec2(x, y).rotate(-rotation).tuple()
+
+    # Move back to the base point
+    x -= width / 2
+    y -= depth / 2
+
     bottom = (0, 0, -1, z)
     top = (0, 0, 1, -(z + height))
-    left = (-1, 0, 0, x)
-    right = (1, 0, 0, -(x + width))
-    front = (0, -1, 0, y)
-    back = (0, 1, 0, -(y + depth))
+    left = (*X.invert().tuple(), 0, x)
+    right = (*X.tuple(), 0, -(x + width))
+    front = (*X.rotate(90).invert().tuple(), 0, y)
+    back = (*X.rotate(90).tuple(), 0, -(y + depth))
 
     return generateBrushDef3((bottom, top, left, right, front, back), comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 

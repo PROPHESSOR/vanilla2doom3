@@ -150,12 +150,30 @@ def _firstprart(value, width, compensation): return value / compensation - width
 def _secondprart(value, width, compensation): return -(value / compensation + width / 2)
 
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
-    return generateRectBy4Points(
-        (v1[0] - width / 2, v1[1] - width / 2), # top left
-        (v2[0] + width / 2, v1[1] - width / 2), # top right
-        (v2[0] + width / 2, v2[1] + width / 2), # bottom right
-        (v1[0] - width / 2, v2[1] + width / 2), # bottom left
-        height) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
+    dir = Vec2.getDirectionFromPoints(*v1, *v2).normalize().normal()
+    antidir = dir.invert()
+
+    p1 = (v1[0] - dir.x * width / 2, v1[1] - dir.y * width / 2)
+    p2 = (v1[0] - antidir.x * width / 2, v1[1] - antidir.y * width / 2)
+    p3 = (v2[0] - dir.x * width / 2, v2[1] - dir.y * width / 2)
+    p4 = (v2[0] - antidir.x * width / 2, v2[1] - antidir.y * width / 2)
+
+    sortedPoints = sortPointsTopLeftClockwise(p1, p2, p3, p4)
+
+    print('####')
+    print(p1)
+    print(p2)
+    print(p3)
+    print(p4)
+    print(sortedPoints)
+    print('////')
+
+    return generateRectBy4Points(*sortedPoints,
+        #(v1[0] - width / 2, v1[1] - width / 2), # top left
+        #(v2[0] + width / 2, v1[1] - width / 2), # top right
+        #(v2[0] + width / 2, v2[1] + width / 2), # bottom right
+        #(v1[0] - width / 2, v2[1] + width / 2), # bottom left
+        height, comment=f'Line(({v1[0]},{v1[1]}), ({v2[0]},{v2[1]}), ({height[0]},{height[1]}))') + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
     # if v1[0] > v2[0] or v1[1] > v2[1]: v1, v2 = v2, v1
     x1, y1 = v1
     x2, y2 = v2
@@ -174,6 +192,24 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, dra
     back = (*dir.normal().invert().tuple(), 0, -(y1 + width / 2))
 
     return generateBrushDef3((bottom, top, left, right, front, back), f'// Line(({x1}, {y1}), ({x2}, {y2}), ({height[0]}, {height[1]}))', indent=indent) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
+
+def sortPointsTopLeftClockwise(p1:tuple, p2:tuple, p3:tuple, p4:tuple) -> tuple:
+    values = set()
+
+    for p in p1, p2, p3, p4:
+        for value in p:
+            values.add(p)
+    
+    if len(values) > 4: raise Exception("Isn't a correct rectangular points")
+
+    del values
+
+    minx = min(p1[0], p2[0], p3[0], p4[0])
+    miny = min(p1[1], p2[1], p3[1], p4[1])
+    maxx = max(p1[1], p2[1], p3[1], p4[1])
+    maxy = max(p1[1], p2[1], p3[1], p4[1])
+
+    return ((minx, miny), (maxx, miny), (maxx, maxy), (minx, maxy))
 
 def generateRectBy4Points(p1:tuple, p2:tuple, p3:tuple, p4:tuple, height:tuple=(0, 8), comment=None, indent=4):
     '''

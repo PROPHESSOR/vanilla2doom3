@@ -150,37 +150,23 @@ def _firstprart(value, width, compensation): return value / compensation - width
 def _secondprart(value, width, compensation): return -(value / compensation + width / 2)
 
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
-    dir = Vec2.getDirectionFromPoints(*v1, *v2).normalize().normal()
-    antidir = dir.invert()
-
-    p1 = (v1[0] - dir.x * width / 2, v1[1] - dir.y * width / 2)
-    p2 = (v1[0] - antidir.x * width / 2, v1[1] - antidir.y * width / 2)
-    p3 = (v2[0] - dir.x * width / 2, v2[1] - dir.y * width / 2)
-    p4 = (v2[0] - antidir.x * width / 2, v2[1] - antidir.y * width / 2)
-
-    sortedPoints = sortPointsTopLeftClockwise(p1, p2, p3, p4)
-
-    print('####')
-    print(p1)
-    print(p2)
-    print(p3)
-    print(p4)
-    print(sortedPoints)
-    print('////')
-
-    return generateRectBy4Points(*sortedPoints,
-        #(v1[0] - width / 2, v1[1] - width / 2), # top left
-        #(v2[0] + width / 2, v1[1] - width / 2), # top right
-        #(v2[0] + width / 2, v2[1] + width / 2), # bottom right
-        #(v1[0] - width / 2, v2[1] + width / 2), # bottom left
-        height, comment=f'Line(({v1[0]},{v1[1]}), ({v2[0]},{v2[1]}), ({height[0]},{height[1]}))') + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
-    # if v1[0] > v2[0] or v1[1] > v2[1]: v1, v2 = v2, v1
     x1, y1 = v1
     x2, y2 = v2
 
     linevector = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
     dir = linevector.normalize() # line direction
     length = linevector.length() # line length
+
+    out = []
+
+    number = 25
+
+    step = length / number
+
+    for i in range(1, number + 1):
+        out.append(generatePoint((x1 + dir.x * step * i, y1 + dir.y * step * i), height[0]))
+
+    return '\n'.join(out)
 
     compensation = dir.tuple()[0] or 1 # 0.x normal compensation for length
 

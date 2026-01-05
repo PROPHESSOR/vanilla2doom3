@@ -274,25 +274,24 @@ def buildBySectors():
             if ceil > maxz: maxz = ceil
             continue
 
-        # DISABLED: Triangular prism generation causes backwards triangles and dmap hangs
-        # For now, use bounding box for all sectors to avoid problematic geometry
+# Use simple rectangular bounding boxes - most stable approach
         slab = 8
         minx_p = min(p[0] for p in poly)
         maxx_p = max(p[0] for p in poly)
         miny_p = min(p[1] for p in poly)
         maxy_p = max(p[1] for p in poly)
-
-        # Create floor and ceiling slabs from bounding box
-        brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
-        brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+        
+        brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} floor'))
+        brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} ceiling'))
 
         if first_floor is None:
             first_floor = floor
 
-        if minx_p < minx: minx = minx_p
-        if maxx_p > maxx: maxx = maxx_p
-        if miny_p < miny: miny = miny_p
-        if maxy_p > maxy: maxy = maxy_p
+        for p in poly:
+            if p[0] < minx: minx = p[0]
+            if p[0] > maxx: maxx = p[0]
+            if p[1] < miny: miny = p[1]
+            if p[1] > maxy: maxy = p[1]
         if floor < minz: minz = floor
         if ceil > maxz: maxz = ceil
 

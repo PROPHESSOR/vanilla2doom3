@@ -114,7 +114,7 @@ def prettyNymber(x):
 
 def getPlaneString(plane: tuple) -> str:
     nx, ny, nz, d = plane
-    return f'( {prettyNymber(nx)} {prettyNymber(ny)} {prettyNymber(nz)} {prettyNymber(d)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "_none"}" 0 0 0'
+    return f'( {prettyNymber(nx)} {prettyNymber(ny)} {prettyNymber(nz)} {prettyNymber(d)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "textures/common/caulk"}" 0 0 0'
 
 def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     ''' generates brushDef3 from a set of planes (nx, ny, nz, d) '''
@@ -134,6 +134,15 @@ def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     lines.append('}')
 
     return ' ' * indent + ('\n' + ' ' * indent).join(lines)
+
+
+def _orient_plane_outward(plane: tuple, inside_point: tuple) -> tuple:
+    nx, ny, nz, d = plane
+    px, py, pz = inside_point
+    val = nx * px + ny * py + nz * pz + d
+    if val > 0:
+        return (-nx, -ny, -nz, -d)
+    return plane
 
 def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8):
     if v1[0] == v2[0] or v1[1] == v2[1]:
@@ -220,6 +229,12 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
     p7 = (p3[0], p3[1], z + height)
     p6 = (p2[0], p2[1], z + height)
 
+    inside = (
+        (p0[0] + p2[0]) / 2,
+        (p0[1] + p2[1]) / 2,
+        z + height / 2,
+    )
+
     planes = (
         plane_from_points(p0, p3, p2),  # bottom
         plane_from_points(p4, p5, p6),  # top
@@ -229,7 +244,9 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
         plane_from_points(p0, p1, p5),  # left (-right)
     )
 
-    return generateBrushDef3(planes, comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
+    oriented = tuple(_orient_plane_outward(p, inside) for p in planes)
+
+    return generateBrushDef3(oriented, comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 
 
 def generateTriPrism(p1: tuple, p2: tuple, p3: tuple, z: float, height: float, indent=4, comment=None) -> str:
@@ -254,7 +271,19 @@ def generateTriPrism(p1: tuple, p2: tuple, p3: tuple, z: float, height: float, i
     side2 = plane_from_points(b1, b2, t2)
     side3 = plane_from_points(b2, b0, t0)
 
-    planes = (bottom, top, side1, side2, side3)
+    inside = (
+        (b0[0] + b1[0] + b2[0]) / 3,
+        (b0[1] + b1[1] + b2[1]) / 3,
+        z + height / 2,
+    )
+
+    planes = (
+        _orient_plane_outward(bottom, inside),
+        _orient_plane_outward(top, inside),
+        _orient_plane_outward(side1, inside),
+        _orient_plane_outward(side2, inside),
+        _orient_plane_outward(side3, inside),
+    )
 
     return generateBrushDef3(planes, comment if comment else f'// TriPrism({p1}, {p2}, {p3}, z={z}, h={height})', indent=indent)
 

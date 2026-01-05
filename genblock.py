@@ -2,11 +2,12 @@
 
 from geometry import *
 
-TEXTURED = False
+DEFAULT_SHADER = "textures/base_floor/sflpanel6"
+TEXTURED = True
 
 def main():
     global TEXTURED
-    TEXTURED = False
+    TEXTURED = True
     playerstart = (32, 32, 16)
 
     testoffset = 0
@@ -114,7 +115,8 @@ def prettyNymber(x):
 
 def getPlaneString(plane: tuple) -> str:
     nx, ny, nz, d = plane
-    return f'( {prettyNymber(nx)} {prettyNymber(ny)} {prettyNymber(nz)} {prettyNymber(d)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "textures/common/caulk"}" 0 0 0'
+    shader = DEFAULT_SHADER if TEXTURED else "textures/common/caulk"
+    return f'( {prettyNymber(nx)} {prettyNymber(ny)} {prettyNymber(nz)} {prettyNymber(d)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{shader}" 0 0 0'
 
 def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     ''' generates brushDef3 from a set of planes (nx, ny, nz, d) '''
@@ -327,28 +329,18 @@ def generateMapFromBrushes(brushes: list, playerstart: tuple):
     lines.append('{')
     lines.append('    "classname" "light"')
     lines.append('    "name" "light1"')
-    lines.append('    "parallel" "1"')
     lines.append('    "noshadows" "1"')
-    lines.append('    "nospecular" "1"')
-    lines.append('    "nodiffuse" "1"')
-    lines.append('    "falloff" "0.000000"')
-    lines.append('    "light_center" "-104 96 -5"')
-    lines.append('    "light_radius" "5000 5000 5000"')
-    lines.append(f'    "origin" "{px} {py} {pz}"')
+    lines.append('    "light_radius" "4096 4096 4096"')
+    lines.append(f'    "origin" "{px} {py} {pz + 128}"')
     lines.append('}')
 
-    lines.append('// Player light')
+    lines.append('// Fill light')
     lines.append('{')
     lines.append('    "classname" "light"')
     lines.append('    "name" "light2"')
-    lines.append('    "parallel" "1"')
     lines.append('    "noshadows" "1"')
-    lines.append('    "nospecular" "1"')
-    lines.append('    "nodiffuse" "1"')
-    lines.append('    "falloff" "0.000000"')
-    lines.append('    "light_center" "104 -96 5"')
-    lines.append('    "light_radius" "3000 3000 3000"')
-    lines.append(f'    "origin" "{px} {py} {pz}"')
+    lines.append('    "light_radius" "4096 4096 4096"')
+    lines.append(f'    "origin" "{px} {py} {pz - 256}"')
     lines.append('}')
 
     return '\n'.join(lines)

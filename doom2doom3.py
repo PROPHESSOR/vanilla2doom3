@@ -141,6 +141,13 @@ def buildBySectors():
         px, py = (0, 0)
     brushes = []
 
+    minx = 1e9
+    miny = 1e9
+    maxx = -1e9
+    maxy = -1e9
+    minz = 1e9
+    maxz = -1e9
+
     for sector in sectors:
         if 'sidedefs' not in sector or not sector['sidedefs']:
             continue
@@ -171,12 +178,27 @@ def buildBySectors():
         for a, b, c in tris:
             if tri_area(a, b, c) == 0:
                 continue
+            orient = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+            if orient < 0:
+                b, c = c, b
             brushes.append(generateTriPrism(a, b, c, floor - slab, slab))
             brushes.append(generateTriPrism(a, b, c, ceil, slab))
 
+            for p in (a, b, c):
+                if p[0] < minx: minx = p[0]
+                if p[0] > maxx: maxx = p[0]
+                if p[1] < miny: miny = p[1]
+                if p[1] > maxy: maxy = p[1]
+            if floor < minz: minz = floor
+            if ceil > maxz: maxz = ceil
+
         seen = set()
         for linedef in linedefs:
-            key = id(linedef)
+            # skip two-sided to avoid sealing portals between sectors
+            if linedef['side2'] != 65535:
+                continue
+
+            key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
             if key in seen:
                 continue
             seen.add(key)
@@ -184,7 +206,17 @@ def buildBySectors():
             v2 = (linedef['vertex2'][0] + OFFSET, linedef['vertex2'][1] + OFFSET)
             brushes.append(generateLine(v1, v2, (floor, ceil), drawpoints=False))
 
-    brushes.append(generateBox(0, 0, -16, 5000))
+    if minx == 1e9:
+        minx, miny, maxx, maxy, minz, maxz = -4096, -4096, 4096, 4096, -1024, 1024
+
+    size_xy = max(maxx - minx, maxy - miny) + 2048
+    size_z = (maxz - minz) + 2048
+    base_z = minz - 1024
+    shell_size = max(size_xy, size_z)
+    shell_x = minx - 1024
+    shell_y = miny - 1024
+
+    brushes.append(generateBox(shell_x, shell_y, base_z, shell_size))
 
     with open('doom2doom3.map', 'w') as _out:
         _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, 8)))

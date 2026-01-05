@@ -118,6 +118,23 @@ def getPlaneString(plane: tuple) -> str:
     shader = DEFAULT_SHADER if TEXTURED else "textures/common/caulk"
     return f'( {prettyNymber(nx)} {prettyNymber(ny)} {prettyNymber(nz)} {prettyNymber(d)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{shader}" 0 0 0'
 
+
+def plane_from_normal_point(normal: tuple, point: tuple) -> tuple:
+    """Create plane from normal pointing OUTWARD and point on plane.
+    In idTech4: negative halfspace is inside (solid), positive is outside (void).
+    So normals should point away from the brush interior."""
+    nx, ny, nz = normal
+    length = math.sqrt(nx * nx + ny * ny + nz * nz)
+    if length == 0:
+        raise ValueError("Zero-length normal")
+    nx /= length
+    ny /= length
+    nz /= length
+    # Keep normal pointing outward (no inversion needed)
+    px, py, pz = point
+    d = -(nx * px + ny * py + nz * pz)
+    return (nx, ny, nz, d)
+
 def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     ''' generates brushDef3 from a set of planes (nx, ny, nz, d) '''
 
@@ -137,14 +154,6 @@ def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
 
     return ' ' * indent + ('\n' + ' ' * indent).join(lines)
 
-
-def _orient_plane_outward(plane: tuple, inside_point: tuple) -> tuple:
-    nx, ny, nz, d = plane
-    px, py, pz = inside_point
-    val = nx * px + ny * py + nz * pz + d
-    if val > 0:
-        return (-nx, -ny, -nz, -d)
-    return plane
 
 def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8):
     if v1[0] == v2[0] or v1[1] == v2[1]:
@@ -220,35 +229,32 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
     forward = Vec2(1.0, 0).rotate(rotation).normalize()
     right = forward.perp().normalize()
 
-    # Base corners (counter-clockwise starting at origin, then lifted to top)
-    p0 = (x, y, z)
-    p1 = (x + forward.x * width, y + forward.y * width, z)
-    p3 = (x + right.x * depth, y + right.y * depth, z)
-    p2 = (p1[0] + right.x * depth, p1[1] + right.y * depth, z)
+    bottom_n = (0, 0, -1)
+    top_n = (0, 0, 1)
 
-    p4 = (p0[0], p0[1], z + height)
-    p5 = (p1[0], p1[1], z + height)
-    p7 = (p3[0], p3[1], z + height)
-    p6 = (p2[0], p2[1], z + height)
+    bottom = plane_from_normal_point(bottom_n, (x, y, z))
+    top = plane_from_normal_point(top_n, (x, y, z + height))
 
-    inside = (
-        (p0[0] + p2[0]) / 2,
-        (p0[1] + p2[1]) / 2,
-        z + height / 2,
-    )
+    front_point = (x + forward.x * width, y + forward.y * width, z)
+    back_point = (x, y, z)
+    front_n = (forward.x, forward.y, 0)
+    back_n = (-forward.x, -forward.y, 0)
+
+    right_point = (x + right.x * depth, y + right.y * depth, z)
+    left_point = (x, y, z)
+    right_n = (right.x, right.y, 0)
+    left_n = (-right.x, -right.y, 0)
 
     planes = (
-        plane_from_points(p0, p3, p2),  # bottom
-        plane_from_points(p4, p5, p6),  # top
-        plane_from_points(p2, p6, p5),  # forward (+forward)
-        plane_from_points(p0, p4, p7),  # back (-forward)
-        plane_from_points(p3, p7, p6),  # right (+right)
-        plane_from_points(p0, p1, p5),  # left (-right)
+        bottom,
+        top,
+        plane_from_normal_point(front_n, front_point),
+        plane_from_normal_point(back_n, back_point),
+        plane_from_normal_point(right_n, right_point),
+        plane_from_normal_point(left_n, left_point),
     )
 
-    oriented = tuple(_orient_plane_outward(p, inside) for p in planes)
-
-    return generateBrushDef3(oriented, comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
+    return generateBrushDef3(planes, comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 
 
 def generateTriPrism(p1: tuple, p2: tuple, p3: tuple, z: float, height: float, indent=4, comment=None) -> str:
@@ -266,26 +272,20 @@ def generateTriPrism(p1: tuple, p2: tuple, p3: tuple, z: float, height: float, i
     t1 = (p2[0], p2[1], z + height)
     t2 = (p3[0], p3[1], z + height)
 
-    bottom = plane_from_points(b0, b2, b1)  # force downward normal
-    top = plane_from_points(t0, t1, t2)      # upward
+    bottom = plane_from_normal_point((0, 0, -1), b0)
+    top = plane_from_normal_point((0, 0, 1), t0)
 
-    side1 = plane_from_points(b0, b1, t1)
-    side2 = plane_from_points(b1, b2, t2)
-    side3 = plane_from_points(b2, b0, t0)
+    def side_plane(a, b):
+        ax, ay = a[0], a[1]
+        bx, by = b[0], b[1]
+        nx, ny = (by - ay), -(bx - ax)  # outward for CCW
+        return plane_from_normal_point((nx, ny, 0), (ax, ay, z))
 
-    inside = (
-        (b0[0] + b1[0] + b2[0]) / 3,
-        (b0[1] + b1[1] + b2[1]) / 3,
-        z + height / 2,
-    )
+    side1 = side_plane(b0, b1)
+    side2 = side_plane(b1, b2)
+    side3 = side_plane(b2, b0)
 
-    planes = (
-        _orient_plane_outward(bottom, inside),
-        _orient_plane_outward(top, inside),
-        _orient_plane_outward(side1, inside),
-        _orient_plane_outward(side2, inside),
-        _orient_plane_outward(side3, inside),
-    )
+    planes = (bottom, top, side1, side2, side3)
 
     return generateBrushDef3(planes, comment if comment else f'// TriPrism({p1}, {p2}, {p3}, z={z}, h={height})', indent=indent)
 
@@ -331,7 +331,7 @@ def generateMapFromBrushes(brushes: list, playerstart: tuple):
     lines.append('    "name" "light1"')
     lines.append('    "noshadows" "1"')
     lines.append('    "light_radius" "4096 4096 4096"')
-    lines.append(f'    "origin" "{px} {py} {pz + 128}"')
+    lines.append(f'    "origin" "{px} {py} {pz + 64}"')
     lines.append('}')
 
     lines.append('// Fill light')
@@ -340,7 +340,7 @@ def generateMapFromBrushes(brushes: list, playerstart: tuple):
     lines.append('    "name" "light2"')
     lines.append('    "noshadows" "1"')
     lines.append('    "light_radius" "4096 4096 4096"')
-    lines.append(f'    "origin" "{px} {py} {pz - 256}"')
+    lines.append(f'    "origin" "{px} {py} {pz - 16}"')
     lines.append('}')
 
     return '\n'.join(lines)

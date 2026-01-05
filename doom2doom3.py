@@ -130,8 +130,44 @@ def triangulate(poly):
 def tri_area(a, b, c):
     return abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
 
+
+def buildTestSingleSector():
+    """Build a simple sealed test room to verify brush normals are correct."""
+    from genblock import generateRect3d, generateMapFromBrushes
+
+    # Simple 512x512x128 room
+    x, y, z = 1000, 1000, 0
+    size = 512
+    height = 128
+    wall_thickness = 8
+
+    brushes = []
+
+    # Floor and ceiling should extend under walls to seal properly
+    # They go from (x - wall_thickness) to (x + size + wall_thickness)
+    total_size = size + 2 * wall_thickness
+
+    # Floor
+    brushes.append(generateRect3d((x - wall_thickness, y - wall_thickness, z - wall_thickness),
+                                  (total_size, total_size, wall_thickness)))
+
+    # Ceiling
+    brushes.append(generateRect3d((x - wall_thickness, y - wall_thickness, z + height),
+                                  (total_size, total_size, wall_thickness)))
+
+    # Four walls (interior space from x to x+size, y to y+size)
+    brushes.append(generateRect3d((x - wall_thickness, y, z), (wall_thickness, size, height)))  # left
+    brushes.append(generateRect3d((x + size, y, z), (wall_thickness, size, height)))  # right
+    brushes.append(generateRect3d((x, y - wall_thickness, z), (size, wall_thickness, height)))  # front
+    brushes.append(generateRect3d((x, y + size, z), (size, wall_thickness, height)))  # back
+
+    with open('doom2doom3.map', 'w') as _out:
+        _out.write(generateMapFromBrushes(brushes, (x + size/2, y + size/2, z + 32)))
+
+
 def main():
     buildBySectors()
+    # buildTestSingleSector()
 
 def buildBySectors():
     ps = parsePlayerStart()
@@ -147,8 +183,12 @@ def buildBySectors():
     maxy = -1e9
     minz = 1e9
     maxz = -1e9
+    first_floor = None
 
-    for sector in sectors:
+    # First pass: generate floor/ceiling geometry for each sector
+    linedef_to_sectors = {}  # (v1, v2) -> [(floor, ceil), ...]
+
+    for sector_idx, sector in enumerate(sectors):
         if 'sidedefs' not in sector or not sector['sidedefs']:
             continue
 
@@ -158,68 +198,176 @@ def buildBySectors():
 
         edges = []
         linedefs = []
+        seen_linedefs = set()
         for sidedef in sector['sidedefs']:
             if 'linedefs' not in sidedef:
                 continue
             for linedef in sidedef['linedefs']:
+                linedef_key = (linedef['v1'], linedef['v2'])
+                if linedef_key in seen_linedefs:
+                    continue
+                seen_linedefs.add(linedef_key)
+                
                 edges.append((linedef['vertex1'], linedef['vertex2']))
                 linedefs.append(linedef)
 
+                # Track which sectors each linedef connects
+                key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
+                if key not in linedef_to_sectors:
+                    linedef_to_sectors[key] = []
+                linedef_to_sectors[key].append((floor, ceil))
+
         poly = order_polygon(edges)
         if len(poly) < 3:
+            print(f"WARNING: Sector {sector_idx} has invalid polygon (< 3 vertices), using bounding box fallback")
+            # Use bounding box fallback for sectors with broken polygon ordering
+            if len(edges) > 0:
+                verts = []
+                for e1, e2 in edges:
+                    verts.append(e1)
+                    verts.append(e2)
+                if len(verts) >= 3:
+                    minx_p = min(v[0] for v in verts)
+                    maxx_p = max(v[0] for v in verts)
+                    miny_p = min(v[1] for v in verts)
+                    maxy_p = max(v[1] for v in verts)
+                    
+                    slab = 8
+                    brushes.append(generateRect3d((minx_p + OFFSET, miny_p + OFFSET, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+                    brushes.append(generateRect3d((minx_p + OFFSET, miny_p + OFFSET, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+                    
+                    if first_floor is None:
+                        first_floor = floor
+                    
+                    if minx_p < minx: minx = minx_p
+                    if maxx_p > maxx: maxx = maxx_p
+                    if miny_p < miny: miny = miny_p
+                    if maxy_p > maxy: maxy = maxy_p
+                    if floor < minz: minz = floor
+                    if ceil > maxz: maxz = ceil
             continue
 
         poly = [(x + OFFSET, y + OFFSET) for (x, y) in poly]
         tris = triangulate(poly)
+
         if not tris:
-            continue
+            print(f"WARNING: Sector {sector_idx} triangulation failed, using bounding box fallback")
+            # Triangulation failed - create bounding box fallback
+            minx_p = min(p[0] for p in poly)
+            maxx_p = max(p[0] for p in poly)
+            miny_p = min(p[1] for p in poly)
+            maxy_p = max(p[1] for p in poly)
 
-        slab = 8
-        for a, b, c in tris:
-            if tri_area(a, b, c) == 0:
-                continue
-            orient = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-            if orient < 0:
-                b, c = c, b
-            brushes.append(generateTriPrism(a, b, c, floor - slab, slab))
-            brushes.append(generateTriPrism(a, b, c, ceil, slab))
+            slab = 8
+            # Create floor and ceiling slabs from bounding box
+            brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+            brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
 
-            for p in (a, b, c):
-                if p[0] < minx: minx = p[0]
-                if p[0] > maxx: maxx = p[0]
-                if p[1] < miny: miny = p[1]
-                if p[1] > maxy: maxy = p[1]
+            if first_floor is None:
+                first_floor = floor
+
+            if minx_p < minx: minx = minx_p
+            if maxx_p > maxx: maxx = maxx_p
+            if miny_p < miny: miny = miny_p
+            if maxy_p > maxy: maxy = maxy_p
             if floor < minz: minz = floor
             if ceil > maxz: maxz = ceil
+            continue
 
-        seen = set()
-        for linedef in linedefs:
-            # skip two-sided to avoid sealing portals between sectors
-            if linedef['side2'] != 65535:
-                continue
+        # DISABLED: Triangular prism generation causes backwards triangles and dmap hangs
+        # For now, use bounding box for all sectors to avoid problematic geometry
+        slab = 8
+        minx_p = min(p[0] for p in poly)
+        maxx_p = max(p[0] for p in poly)
+        miny_p = min(p[1] for p in poly)
+        maxy_p = max(p[1] for p in poly)
 
-            key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
-            if key in seen:
+        # Create floor and ceiling slabs from bounding box
+        brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+        brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+
+        if first_floor is None:
+            first_floor = floor
+
+        if minx_p < minx: minx = minx_p
+        if maxx_p > maxx: maxx = maxx_p
+        if miny_p < miny: miny = miny_p
+        if maxy_p > maxy: maxy = maxy_p
+        if floor < minz: minz = floor
+        if ceil > maxz: maxz = ceil
+
+    # Second pass: generate walls for linedefs
+    # Create walls for one-sided linedefs and step walls for height differences
+    seen = set()
+    for sector in sectors:
+        if 'sidedefs' not in sector or not sector['sidedefs']:
+            continue
+
+        sector_floor = sector['heightFloor']
+        sector_ceil = sector['heightCeil']
+
+        for sidedef in sector['sidedefs']:
+            if 'linedefs' not in sidedef:
                 continue
-            seen.add(key)
-            v1 = (linedef['vertex1'][0] + OFFSET, linedef['vertex1'][1] + OFFSET)
-            v2 = (linedef['vertex2'][0] + OFFSET, linedef['vertex2'][1] + OFFSET)
-            brushes.append(generateLine(v1, v2, (floor, ceil), drawpoints=False))
+            for linedef in sidedef['linedefs']:
+                key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                v1 = (linedef['vertex1'][0] + OFFSET, linedef['vertex1'][1] + OFFSET)
+                v2 = (linedef['vertex2'][0] + OFFSET, linedef['vertex2'][1] + OFFSET)
+
+                # One-sided linedefs: create full wall
+                if linedef['side2'] == 65535:
+                    brushes.append(generateLine(v1, v2, (sector_floor, sector_ceil), drawpoints=False))
+                # Two-sided linedefs: create step walls if heights differ
+                else:
+                    heights = linedef_to_sectors.get(key, [(sector_floor, sector_ceil)])
+                    if len(heights) >= 2:
+                        # Find min floor and max ceil across both sectors
+                        all_floors = [h[0] for h in heights]
+                        all_ceils = [h[1] for h in heights]
+                        min_floor = min(all_floors)
+                        max_ceil = max(all_ceils)
+
+                        # Create wall from lowest floor to highest ceiling to fill any gaps
+                        if min_floor != sector_floor or max_ceil != sector_ceil:
+                            # This creates intermediate step walls
+                            brushes.append(generateLine(v1, v2, (min_floor, max_ceil), drawpoints=False))
 
     if minx == 1e9:
         minx, miny, maxx, maxy, minz, maxz = -4096, -4096, 4096, 4096, -1024, 1024
 
-    size_xy = max(maxx - minx, maxy - miny) + 2048
-    size_z = (maxz - minz) + 2048
-    base_z = minz - 1024
-    shell_size = max(size_xy, size_z)
-    shell_x = minx - 1024
-    shell_y = miny - 1024
+    # Add outer sealing layer - simple thick walls around the entire map
+    seal_width = 128
 
-    brushes.append(generateBox(shell_x, shell_y, base_z, shell_size))
+    # Extend beyond all geometry
+    outer_minx = minx - seal_width
+    outer_miny = miny - seal_width
+    outer_maxx = maxx + seal_width
+    outer_maxy = maxy + seal_width
+    outer_minz = minz - seal_width
+    outer_maxz = maxz + seal_width
+
+    # Create 6 solid sealing brushes (one for each side of the bounding box)
+    brushes.append(generateRect3d((outer_minx, outer_miny, outer_minz),
+                                   (seal_width, outer_maxy - outer_miny, outer_maxz - outer_minz)))  # left
+    brushes.append(generateRect3d((outer_maxx - seal_width, outer_miny, outer_minz),
+                                   (seal_width, outer_maxy - outer_miny, outer_maxz - outer_minz)))  # right
+    brushes.append(generateRect3d((outer_minx, outer_miny, outer_minz),
+                                   (outer_maxx - outer_minx, seal_width, outer_maxz - outer_minz)))  # front
+    brushes.append(generateRect3d((outer_minx, outer_maxy - seal_width, outer_minz),
+                                   (outer_maxx - outer_minx, seal_width, outer_maxz - outer_minz)))  # back
+    brushes.append(generateRect3d((outer_minx, outer_miny, outer_minz),
+                                   (outer_maxx - outer_minx, outer_maxy - outer_miny, seal_width)))  # floor
+    brushes.append(generateRect3d((outer_minx, outer_miny, outer_maxz - seal_width),
+                                   (outer_maxx - outer_minx, outer_maxy - outer_miny, seal_width)))  # ceiling
+
+    pz = (first_floor if first_floor is not None else 0) + 16
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, 8)))
+        _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, pz)))
 
 def getBorders(lines: list) -> list:
     ''' [(minx, miny), (maxx, maxy)] '''

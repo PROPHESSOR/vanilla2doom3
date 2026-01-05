@@ -149,6 +149,13 @@ def parseSectors() -> list:
             sidedef['linedefs'] = []
 
         sidedef['linedefs'].append(linedef)
+        
+        # Also process side2 (back side) if it exists
+        if linedef['side2'] != 65535:
+            sidedef2 = sidedefs[linedef['side2']]
+            if not 'linedefs' in sidedef2:
+                sidedef2['linedefs'] = []
+            sidedef2['linedefs'].append(linedef)
 
     for sidedef in sidedefs:
         sector = sectors[sidedef['sector']]

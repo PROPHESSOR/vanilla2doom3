@@ -261,26 +261,26 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
 def generateCutRectSector(polygon, z: float, height: float, indent=4, comment=None) -> list:
     '''Generate a rectangular surface for a sector with cutting planes to match polygon boundary.
     Uses a bounding box with cutting planes: creates rectangle then cuts edges with planes.'''
-    
+
     if len(polygon) < 3:
         return []
-    
+
     # Bottom and top planes (these define the height)
     bottom = plane_from_normal_point((0, 0, -1), (polygon[0][0], polygon[0][1], z))
     top = plane_from_normal_point((0, 0, 1), (polygon[0][0], polygon[0][1], z + height))
-    
+
     planes = [bottom, top]
     seen_planes = set()
-    
+
     # Add cutting planes for each edge of the polygon
     for i in range(len(polygon)):
         p1 = polygon[i]
         p2 = polygon[(i + 1) % len(polygon)]
-        
+
         # Edge vector
         ex = p2[0] - p1[0]
         ey = p2[1] - p1[1]
-        
+
         # Outward normal (perpendicular to edge, for CCW polygon)
         # For CCW polygon: rotate edge 90 degrees CCW to get inward normal, then negate for outward
         nx = ey
@@ -289,19 +289,19 @@ def generateCutRectSector(polygon, z: float, height: float, indent=4, comment=No
         if length > 0:
             nx /= length
             ny /= length
-        
+
         # Create cutting plane
         cut_plane = plane_from_normal_point((nx, ny, 0), (p1[0], p1[1], z))
-        
+
         # Deduplicate planes (round for comparison)
         plane_key = (round(cut_plane[0], 5), round(cut_plane[1], 5), round(cut_plane[2], 5), round(cut_plane[3], 1))
         if plane_key not in seen_planes:
             planes.append(cut_plane)
             seen_planes.add(plane_key)
-    
+
     if len(planes) < 4:
         return []
-    
+
     brush_str = generateBrushDef3(tuple(planes), comment if comment else f'// CutRect z={z} h={height}', indent=indent)
     return [brush_str]
 

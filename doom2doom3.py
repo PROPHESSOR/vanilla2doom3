@@ -280,7 +280,7 @@ def buildBySectors():
         maxx_p = max(p[0] for p in poly)
         miny_p = min(p[1] for p in poly)
         maxy_p = max(p[1] for p in poly)
-        
+
         brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} floor'))
         brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} ceiling'))
 

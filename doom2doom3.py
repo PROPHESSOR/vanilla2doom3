@@ -1,5 +1,134 @@
 from wadparser import parseLines, parseSectors, parsePlayerStart
-from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox
+from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox, generateTriPrism
+
+OFFSET = 2000
+
+
+def polygon_area(poly):
+    area = 0
+    for i in range(len(poly)):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % len(poly)]
+        area += x1 * y2 - x2 * y1
+    return area / 2
+
+
+def order_polygon(edges):
+    if not edges:
+        return []
+
+    remaining = edges[:]
+    poly = [remaining[0][0], remaining[0][1]]
+    remaining.pop(0)
+
+    guard = 0
+    while remaining and guard < 10000:
+        guard += 1
+        last = poly[-1]
+        found = False
+        for i, edge in enumerate(remaining):
+            a, b = edge
+            if a == last:
+                poly.append(b)
+                remaining.pop(i)
+                found = True
+                break
+            if b == last:
+                poly.append(a)
+                remaining.pop(i)
+                found = True
+                break
+
+        if not found:
+            break
+
+    if len(poly) > 2 and poly[0] == poly[-1]:
+        poly.pop()
+
+    return poly
+
+
+def point_in_triangle(p, a, b, c):
+    # Barycentric method
+    px, py = p
+    ax, ay = a
+    bx, by = b
+    cx, cy = c
+
+    v0x, v0y = cx - ax, cy - ay
+    v1x, v1y = bx - ax, by - ay
+    v2x, v2y = px - ax, py - ay
+
+    dot00 = v0x * v0x + v0y * v0y
+    dot01 = v0x * v1x + v0y * v1y
+    dot02 = v0x * v2x + v0y * v2y
+    dot11 = v1x * v1x + v1y * v1y
+    dot12 = v1x * v2x + v1y * v2y
+
+    denom = dot00 * dot11 - dot01 * dot01
+    if denom == 0:
+        return False
+
+    inv_denom = 1 / denom
+    u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+    v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+
+    return u >= 0 and v >= 0 and (u + v) <= 1
+
+
+def triangulate(poly):
+    if len(poly) < 3:
+        return []
+
+    verts = poly[:]
+    indices = list(range(len(verts)))
+    triangles = []
+    orientation = 1 if polygon_area(poly) >= 0 else -1
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    guard = 0
+    while len(indices) > 3 and guard < 10000:
+        guard += 1
+        ear_found = False
+        for i in range(len(indices)):
+            i_prev = indices[(i - 1) % len(indices)]
+            i_curr = indices[i]
+            i_next = indices[(i + 1) % len(indices)]
+
+            a, b, c = verts[i_prev], verts[i_curr], verts[i_next]
+            if cross(a, b, c) * orientation <= 0:
+                continue
+
+            has_inside = False
+            for j in indices:
+                if j in (i_prev, i_curr, i_next):
+                    continue
+                if point_in_triangle(verts[j], a, b, c):
+                    has_inside = True
+                    break
+
+            if has_inside:
+                continue
+
+            triangles.append((a, b, c))
+            indices.pop(i)
+            ear_found = True
+            break
+
+        if not ear_found:
+            break
+
+    if len(indices) == 3:
+        a, b, c = (verts[idx] for idx in indices)
+        triangles.append((a, b, c))
+
+    return triangles
+
+
+def tri_area(a, b, c):
+    return abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
 
 def main():
     buildBySectors()
@@ -7,82 +136,58 @@ def main():
 def buildBySectors():
     ps = parsePlayerStart()
     sectors = parseSectors()
-
-    safesectors = sectors
-
-    # for sector in sectors:
-    #     linedefs = []
-
-    #     for sidedef in sector['sidedefs']:
-    #         if not 'linedefs' in sidedef: break
-
-    #         for linedef in sidedef['linedefs']:
-    #             if not linedef in linedefs:
-    #                 linedefs.append(linedef)
-        
-    #     if len(linedefs) == 4:
-    #         safesectors.append(sector)
-
-    # print(f'Removed {len(sectors) - len(safesectors)} unsafe sectors (now there are {len(safesectors)} safe sectors)')
-
+    px, py = ps
+    if px is None or py is None:
+        px, py = (0, 0)
     brushes = []
 
-    # pointMin = [9999, 9999]
-    # pointMax = [-9999, -9999]
-    # heightMinMax = [9999, -9999]
-
-    for sector in safesectors:
-        # for vert in line[0:2]:
-            # if vert[0] < pointMin[0]: pointMin[0] = vert[0]
-            # if vert[0] > pointMax[0]: pointMax[0] = vert[0]
-            # if vert[1] < pointMin[1]: pointMin[1] = vert[1]
-            # if vert[1] > pointMax[1]: pointMax[1] = vert[1]
-
-        # if line[2][0] < heightMinMax[0]: heightMinMax[0] = line[2][0]
-        # if line[2][0] > heightMinMax[1]: heightMinMax[1] = line[2][0]
-        # if line[2][1] < heightMinMax[0]: heightMinMax[0] = line[2][1]
-        # if line[2][1] > heightMinMax[1]: heightMinMax[1] = line[2][1]
+    for sector in sectors:
+        if 'sidedefs' not in sector or not sector['sidedefs']:
+            continue
 
         floor, ceil = sector['heightFloor'], sector['heightCeil']
+        if ceil <= floor:
+            continue
 
-        lines = []
-
+        edges = []
+        linedefs = []
         for sidedef in sector['sidedefs']:
-            if not 'linedefs' in sidedef: continue
-            if sidedef['texMiddle'] == '-':
-                if sidedef['texLower'] != '-':
-                    pass # TODO: Generate block from {min} to floor
-                if sidedef['texUpper'] != '-':
-                    pass # TODO: Generate block from ceil to {max}
+            if 'linedefs' not in sidedef:
                 continue
-
             for linedef in sidedef['linedefs']:
-                lines.append(((linedef['vertex1'][0] + 2000, linedef['vertex1'][1] + 2000), (linedef['vertex2'][0] + 2000, linedef['vertex2'][1] + 2000)))
+                edges.append((linedef['vertex1'], linedef['vertex2']))
+                linedefs.append(linedef)
 
-        minborder, maxborder = getBorders(lines)
+        poly = order_polygon(edges)
+        if len(poly) < 3:
+            continue
 
-        # ps = [
-        #     (maxborder[0] - minborder[0]) / 2 + minborder[0],
-        #     (maxborder[1] - minborder[1]) / 2 + minborder[1],
-        #     floor,
-        # ]
+        poly = [(x + OFFSET, y + OFFSET) for (x, y) in poly]
+        tris = triangulate(poly)
+        if not tris:
+            continue
 
-        i = 0
-        for line in lines:
-            brushes.append(generateLine(line[0], line[1], (floor, ceil), drawpoints=False))
-            i+=1
-            # break
+        slab = 8
+        for a, b, c in tris:
+            if tri_area(a, b, c) == 0:
+                continue
+            brushes.append(generateTriPrism(a, b, c, floor - slab, slab))
+            brushes.append(generateTriPrism(a, b, c, ceil, slab))
 
-        brushes.append(generateRect3d((minborder[0], minborder[1], floor - 8), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
-        brushes.append(generateRect3d((minborder[0], minborder[1], ceil), (maxborder[0] - minborder[0], maxborder[1] - minborder[1], 8)))
+        seen = set()
+        for linedef in linedefs:
+            key = id(linedef)
+            if key in seen:
+                continue
+            seen.add(key)
+            v1 = (linedef['vertex1'][0] + OFFSET, linedef['vertex1'][1] + OFFSET)
+            v2 = (linedef['vertex2'][0] + OFFSET, linedef['vertex2'][1] + OFFSET)
+            brushes.append(generateLine(v1, v2, (floor, ceil), drawpoints=False))
 
-        # break # break after first sector to test
-
-    # brushes.append(generateBox(pointMin[0], pointMin[1], heightMinMax[0], max(pointMax[0], pointMax[1], heightMinMax[1])))
     brushes.append(generateBox(0, 0, -16, 5000))
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, (ps[0] + 2000, ps[1] + 2000, 8)))
+        _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, 8)))
 
 def getBorders(lines: list) -> list:
     ''' [(minx, miny), (maxx, maxy)] '''
@@ -135,7 +240,7 @@ def buildByLines():
         # if line[2][1] < heightMinMax[0]: heightMinMax[0] = line[2][1]
         # if line[2][1] > heightMinMax[1]: heightMinMax[1] = line[2][1]
 
-        brushes.append(generateSafeLine((line[0][0] + 2000, line[0][1] + 2000), (line[1][0] + 2000, line[1][1] + 2000), line[2]))
+        brushes.append(generateSafeLine((line[0][0] + OFFSET, line[0][1] + OFFSET), (line[1][0] + OFFSET, line[1][1] + OFFSET), line[2]))
 
     # brushes.append(generateBox(pointMin[0], pointMin[1], heightMinMax[0], max(pointMax[0], pointMax[1], heightMinMax[1])))
     brushes.append(generateBox(0, 0, -16, 5000))

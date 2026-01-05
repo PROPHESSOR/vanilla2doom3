@@ -112,13 +112,14 @@ def prettyNymber(x):
 
     return round(x, 6)
 
-def getPlaneString(x: int, y: int, z: int, distance: int) -> str:
-    return f'( {prettyNymber(x)} {prettyNymber(y)} {prettyNymber(z)} {prettyNymber(distance)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "_none"}" 0 0 0'
+def getPlaneString(plane: tuple) -> str:
+    nx, ny, nz, d = plane
+    return f'( {prettyNymber(nx)} {prettyNymber(ny)} {prettyNymber(nz)} {prettyNymber(d)} ) ( ( 0.125 0 -5 ) ( 0 0.125 57 ) ) "{"textures/alphalabs/a_enwall13c" if TEXTURED else "_none"}" 0 0 0'
 
 def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
-    ''' generatesBrushDef3 from 6 *brushes* (normalx, normaly, normalz, distancefromorigin) '''
+    ''' generates brushDef3 from a set of planes (nx, ny, nz, d) '''
 
-    if len(brushes) != 6: raise Exception("There must be 6 brushes")
+    if len(brushes) < 4: raise Exception("There must be at least 4 planes")
 
     lines = [
         comment,
@@ -127,7 +128,7 @@ def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     ]
 
     for brush in brushes:
-        lines.append('        ' + getPlaneString(*brush))
+        lines.append('        ' + getPlaneString(brush))
 
     lines.append('    }')
     lines.append('}')
@@ -135,17 +136,10 @@ def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
     return ' ' * indent + ('\n' + ' ' * indent).join(lines)
 
 def generateSafeLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8):
-    if v1[0] == v2[0]: # vertical
-        if v2[1] < v1[1]: v1, v2 = v2, v1
-        sizex = width
-        sizey = v2[1] - v1[1]# + 8
-        return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
-    elif v1[1] == v2[1]: # horizontal
-        if v2[0] < v1[0]: v1, v2 = v2, v1
-        sizex = v2[0] - v1[0]# + 8
-        sizey = width
-        return generateRect3d((v1[0], v1[1], height[0]), (sizex, sizey, height[1] - height[0]))
-    else: raise Exception('Not a safe line')
+    if v1[0] == v2[0] or v1[1] == v2[1]:
+        return generateLine(v1, v2, height, indent=indent, width=width)
+
+    raise Exception('Not a safe line')
 
 def generatePoint(v:tuple, height:float, indent=4, width=4):
     return generateCube(v[0] - width / 2, v[1] - width / 2, height - width / 2, width)
@@ -156,12 +150,19 @@ def _secondprart(value, width, compensation): return -(value / compensation + wi
 def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, drawpoints=False):
     x1, y1 = v1
     x2, y2 = v2
-    
-    linevector = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
-    dir = linevector.normalize()
-    length = linevector.length() # line length
 
-    return generateRect3d((x1, y1, height[0]), (length, width, height[1] - height[0]), rotation=dir.rotation()) + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
+    linevector = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
+    length = linevector.length()
+    if length == 0:
+        raise Exception('Zero-length line')
+
+    dir = linevector.normalize()
+    right = dir.perp().normalize()
+
+    origin = (x1 - right.x * width / 2, y1 - right.y * width / 2, height[0])
+    brush = generateRect3d(origin, (length, width, height[1] - height[0]), rotation=dir.angleDeg())
+
+    return brush + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 
 def sortPointsTopLeftClockwise(p1:tuple, p2:tuple, p3:tuple, p4:tuple) -> tuple:
     values = set()
@@ -169,7 +170,7 @@ def sortPointsTopLeftClockwise(p1:tuple, p2:tuple, p3:tuple, p4:tuple) -> tuple:
     for p in p1, p2, p3, p4:
         for value in p:
             values.add(p)
-    
+
     if len(values) > 4: raise Exception("Isn't a correct rectangular points")
 
     del values
@@ -205,28 +206,57 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
     x, y, z = position
     width, depth, height = size
 
-    # Move center point to the origin
-    # x += width / 2
-    # y += depth / 2
+    forward = Vec2(1.0, 0).rotate(rotation).normalize()
+    right = forward.perp().normalize()
 
-    # Rotate around the origin
-    X = Vec2(1.0, 0).rotate(rotation)
+    # Base corners (counter-clockwise starting at origin, then lifted to top)
+    p0 = (x, y, z)
+    p1 = (x + forward.x * width, y + forward.y * width, z)
+    p3 = (x + right.x * depth, y + right.y * depth, z)
+    p2 = (p1[0] + right.x * depth, p1[1] + right.y * depth, z)
 
-    # Compensate rotation
-    x, y = Vec2(x, y).rotate(-rotation).tuple()
+    p4 = (p0[0], p0[1], z + height)
+    p5 = (p1[0], p1[1], z + height)
+    p7 = (p3[0], p3[1], z + height)
+    p6 = (p2[0], p2[1], z + height)
 
-    # Move back to the base point
-    # x -= width / 2
-    # y -= depth / 2
+    planes = (
+        plane_from_points(p0, p3, p2),  # bottom
+        plane_from_points(p4, p5, p6),  # top
+        plane_from_points(p2, p6, p5),  # forward (+forward)
+        plane_from_points(p0, p4, p7),  # back (-forward)
+        plane_from_points(p3, p7, p6),  # right (+right)
+        plane_from_points(p0, p1, p5),  # left (-right)
+    )
 
-    bottom = (0, 0, -1, z)
-    top = (0, 0, 1, -(z + height))
-    left = (*X.invert().tuple(), 0, x)
-    right = (*X.tuple(), 0, -(x + width))
-    front = (*X.rotate(90).invert().tuple(), 0, y)
-    back = (*X.rotate(90).tuple(), 0, -(y + depth))
+    return generateBrushDef3(planes, comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
 
-    return generateBrushDef3((bottom, top, left, right, front, back), comment if comment else f'// Rect3d(({x}, {y}, {z}), ({width}, {depth}, {height})', indent=indent)
+
+def generateTriPrism(p1: tuple, p2: tuple, p3: tuple, z: float, height: float, indent=4, comment=None) -> str:
+    '''Generate a triangular prism brush from 3 base points (counter-clockwise preferred).'''
+
+    orient = (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+    if orient < 0:
+        p2, p3 = p3, p2
+
+    b0 = (p1[0], p1[1], z)
+    b1 = (p2[0], p2[1], z)
+    b2 = (p3[0], p3[1], z)
+
+    t0 = (p1[0], p1[1], z + height)
+    t1 = (p2[0], p2[1], z + height)
+    t2 = (p3[0], p3[1], z + height)
+
+    bottom = plane_from_points(b0, b2, b1)  # force downward normal
+    top = plane_from_points(t0, t1, t2)      # upward
+
+    side1 = plane_from_points(b0, b1, t1)
+    side2 = plane_from_points(b1, b2, t2)
+    side3 = plane_from_points(b2, b0, t0)
+
+    planes = (bottom, top, side1, side2, side3)
+
+    return generateBrushDef3(planes, comment if comment else f'// TriPrism({p1}, {p2}, {p3}, z={z}, h={height})', indent=indent)
 
 def generateCube(x, y, z, size, indent=4) -> str:
     return generateRect3d((x, y, z), (size, size, size), indent=indent, comment=f'// Cube({x}, {y}, {z}, {size})')

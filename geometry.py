@@ -23,7 +23,7 @@ class Vec2():
 
     def __repr__(self):
         return f'Vec2({self.x}, {self.y})'
-    
+
     def __str__(self):
         return f'Vec2({self.x}, {self.y})'
 
@@ -32,6 +32,9 @@ class Vec2():
 
     def mul(self, x, y):
         return Vec2(self.x * x, self.y * y)
+
+    def dot(self, other):
+        return self.x * other.x + self.y * other.y
 
     def length(self) -> float:
         return math.sqrt(self.x ** 2 + self.y ** 2)
@@ -42,6 +45,9 @@ class Vec2():
 
     def normal(self):
         return self.rotate(-90).normalize()
+
+    def perp(self):
+        return Vec2(-self.y, self.x)
 
     def rotate(self, deg):
         t = math.radians(deg)
@@ -55,6 +61,9 @@ class Vec2():
 
     def invert(self):
         return Vec2(-self.x, -self.y)
+
+    def angleDeg(self):
+        return math.degrees(math.atan2(self.y, self.x))
 
     def tuple(self) -> tuple:
         return (self.x, self.y)
@@ -75,8 +84,21 @@ class Vec3():
     def add(self, x, y, z):
         return Vec3(self.x + x, self.y + y, self.z + z)
 
+    def sub(self, x, y, z):
+        return Vec3(self.x - x, self.y - y, self.z - z)
+
     def mul(self, x, y, z):
         return Vec3(self.x * x, self.y * y, self.z + z)
+
+    def dot(self, other):
+        return self.x * other.x + self.y * other.y + self.z * other.z
+
+    def cross(self, other):
+        return Vec3(
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
+        )
 
     def length(self) -> float:
         return math.sqrt(self.x ** 2 + self.y ** 2 + self.z ** 2)
@@ -90,3 +112,22 @@ class Vec3():
 
     def string(self) -> str:
         return f'Vec3({self.x}, {self.y}, {self.z})'
+
+
+def plane_from_points(p1: tuple, p2: tuple, p3: tuple) -> tuple:
+    """Return normalized plane (nx, ny, nz, d) built from three points."""
+
+    a = Vec3(*p1)
+    b = Vec3(*p2)
+    c = Vec3(*p3)
+
+    ab = b.sub(a.x, a.y, a.z)
+    ac = c.sub(a.x, a.y, a.z)
+    normal = ab.cross(ac)
+    length = normal.length()
+    if length == 0:
+        raise ValueError("Cannot build plane from collinear points")
+
+    n = normal.normalize()
+    d = -n.dot(a)
+    return (n.x, n.y, n.z, d)

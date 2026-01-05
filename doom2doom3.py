@@ -171,7 +171,7 @@ def main():
 
 def buildBySectors():
     ps = parsePlayerStart()
-    sectors = parseSectors()
+    sectors, sidedefs = parseSectors()
     px, py = ps
     if px is None or py is None:
         px, py = (0, 0)
@@ -207,7 +207,7 @@ def buildBySectors():
                 if linedef_key in seen_linedefs:
                     continue
                 seen_linedefs.add(linedef_key)
-                
+
                 edges.append((linedef['vertex1'], linedef['vertex2']))
                 linedefs.append(linedef)
 
@@ -231,14 +231,14 @@ def buildBySectors():
                     maxx_p = max(v[0] for v in verts)
                     miny_p = min(v[1] for v in verts)
                     maxy_p = max(v[1] for v in verts)
-                    
+
                     slab = 8
                     brushes.append(generateRect3d((minx_p + OFFSET, miny_p + OFFSET, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
                     brushes.append(generateRect3d((minx_p + OFFSET, miny_p + OFFSET, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
-                    
+
                     if first_floor is None:
                         first_floor = floor
-                    
+
                     if minx_p < minx: minx = minx_p
                     if maxx_p > maxx: maxx = maxx_p
                     if miny_p < miny: miny = miny_p
@@ -299,6 +299,9 @@ def buildBySectors():
     # Second pass: generate walls for linedefs
     # Create walls for one-sided linedefs and step walls for height differences
     seen = set()
+
+    # Need to access all linedefs with their sidedef info
+    # We'll collect them from sectors but track which have been processed
     for sector in sectors:
         if 'sidedefs' not in sector or not sector['sidedefs']:
             continue
@@ -321,20 +324,29 @@ def buildBySectors():
                 # One-sided linedefs: create full wall
                 if linedef['side2'] == 65535:
                     brushes.append(generateLine(v1, v2, (sector_floor, sector_ceil), drawpoints=False))
-                # Two-sided linedefs: create step walls if heights differ
+                # Two-sided linedefs: compare front and back sectors
                 else:
-                    heights = linedef_to_sectors.get(key, [(sector_floor, sector_ceil)])
-                    if len(heights) >= 2:
-                        # Find min floor and max ceil across both sectors
-                        all_floors = [h[0] for h in heights]
-                        all_ceils = [h[1] for h in heights]
-                        min_floor = min(all_floors)
-                        max_ceil = max(all_ceils)
+                    # Get front sector (current sector)
+                    front_floor = sector_floor
+                    front_ceil = sector_ceil
 
-                        # Create wall from lowest floor to highest ceiling to fill any gaps
-                        if min_floor != sector_floor or max_ceil != sector_ceil:
-                            # This creates intermediate step walls
-                            brushes.append(generateLine(v1, v2, (min_floor, max_ceil), drawpoints=False))
+                    # Get back sector using side2 index
+                    back_sidedef = sidedefs[linedef['side2']]
+                    back_sector = sectors[back_sidedef['sector']]
+                    back_floor = back_sector['heightFloor']
+                    back_ceil = back_sector['heightCeil']
+
+                    # Create lower wall if floors differ
+                    if front_floor != back_floor:
+                        min_floor = min(front_floor, back_floor)
+                        max_floor = max(front_floor, back_floor)
+                        brushes.append(generateLine(v1, v2, (min_floor, max_floor), drawpoints=False))
+
+                    # Create upper wall if ceilings differ
+                    if front_ceil != back_ceil:
+                        min_ceil = min(front_ceil, back_ceil)
+                        max_ceil = max(front_ceil, back_ceil)
+                        brushes.append(generateLine(v1, v2, (min_ceil, max_ceil), drawpoints=False))
 
     if minx == 1e9:
         minx, miny, maxx, maxy, minz, maxz = -4096, -4096, 4096, 4096, -1024, 1024

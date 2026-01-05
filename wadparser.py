@@ -158,7 +158,7 @@ def parseSectors() -> list:
 
         sector['sidedefs'].append(sidedef)
 
-    return sectors
+    return sectors, sidedefs
 
 def parsePlayerStart() -> tuple:
     things_stream = open('wad/THINGS.lmp', 'rb')

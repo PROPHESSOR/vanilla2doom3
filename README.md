@@ -81,19 +81,12 @@ Doom 3 geometry uses **brush primitives** defined by planes:
 
 ```
 vanilla2doom3/
-├── doom2doom3.py               # Main converter orchestration
-├── genblock.py                 # Brush primitive generation
-├── wadparser.py                # WAD binary format parsing
-├── geometry.py                 # Vector math utilities
-├── ByteTools.py                # Binary file I/O utilities
-├── KNOWLEDGE.md                # Technical reference documentation
-├── FLOOR_CEILING_FIX.md        # Floor/ceiling geometry fix details
-├── README.md                   # This file
-├── test_box.map                # Reference box map (original Doom 3)
-├── test_boxstack.map           # Reference stacked geometry map
-├── demo_mars_city1.map         # Reference complex map
-├── compilation.log             # dmap compilation output
-└── wad/                        # Input WAD files directory
+├── doom2doom3.py           # Main converter orchestration
+├── genblock.py             # Brush primitive generation
+├── wadparser.py            # WAD binary format parsing
+├── geometry.py             # Vector math utilities
+├── ByteTools.py            # Binary file I/O utilities
+└── wad/                    # Input WAD files directory
     ├── VERTEXES.lmp
     ├── LINEDEFS.lmp
     ├── SIDEDEFS.lmp
@@ -115,18 +108,6 @@ vanilla2doom3/
 - Proper sealing with outer bounding box to prevent leaks
 - Handles arbitrary polygon shapes through edge-cutting planes
 - Supports platforms, stairs, and complex height variations
-- Filters degenerate subsectors to prevent backwards triangle warnings
-
-## Known Issues & Fixes
-
-### Floor/Ceiling Geometry Warnings (FIXED)
-**Issue**: dmap compiler reported "backwards triangle in input!" warnings (11 instances) on floor/ceiling brushes.
-
-**Root Cause**: Degenerate subsectors with zero or near-zero polygon area (colinear/duplicate vertices) generated invalid cutting planes.
-
-**Fix**: Added polygon area validation to filter subsectors with area < 1.0 square units before brush generation. See [FLOOR_CEILING_FIX.md](FLOOR_CEILING_FIX.md) for detailed analysis.
-
-**Impact**: Eliminates nearly all degenerate geometry. Remaining valid subsectors generate proper floor/ceiling brushes.
 
 ## Design Principles for Future Development
 
@@ -135,23 +116,10 @@ vanilla2doom3/
 3. **Stable Over Perfect**: Prefer rectangular approximations over complex geometry that causes compilation issues
 4. **Deduplication**: Remove duplicate/mirrored planes before brush generation to prevent dmap warnings
 5. **Sector Association**: Both side1 and side2 references need processing for complete geometry coverage
-6. **Subsector Validation**: Filter degenerate subsectors (area < 1.0 units²) before processing to prevent invalid geometry
-
-## Reference Maps and Validation
-
-To validate the floor/ceiling generation and brush geometry correctness:
-- **test_box.map** - Simple reference box structure showing correct floor/ceiling brush layout
-- **test_boxstack.map** - Reference map with stacked geometry (height variations)
-- **demo_mars_city1.map** - Another reference map from original Doom 3
-- **compilation.log** - dmap output showing compilation warnings and errors for the test map
-
-These reference maps demonstrate proper brushDef3 format and can be compared against generated maps to identify plane orientation and geometry issues.
 
 ## TODO
 
 - **Merge Coplanar Adjacent Subsectors**: Add optimization to merge coplanar adjacent subsectors to reduce brush count while maintaining geometric correctness
-- **Fine-tune Degenerate Threshold**: Analyze more maps to determine optimal area threshold (currently 1.0 units²)
-- **BSP Subsector Quality Analysis**: Track and report statistics on degenerate subsectors per sector
 
 ## Future Enhancement Opportunities
 

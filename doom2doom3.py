@@ -339,85 +339,9 @@ def buildBySectors():
     maxz = -1e9
     first_floor = None
 
-# Pre-pass: find floor height statistics to detect raised platforms
-    # Use the most common floor height as the "base" floor
-    from collections import Counter
-    floor_heights = []
-    for sector in sectors:
-        if 'sidedefs' in sector and sector['sidedefs']:
-            floor_h = sector['heightFloor']
-            ceil_h = sector['heightCeil']
-            if ceil_h > floor_h:
-                floor_heights.append(floor_h)
+    # First pass: generate floor/ceiling geometry for each sector
+    linedef_to_sectors = {}  # (v1, v2) -> [(floor, ceil), ...]
 
-    if floor_heights:
-        floor_counter = Counter(floor_heights)
-        base_floor = floor_counter.most_common(1)[0][0]  # Most common floor height
-        global_min_floor = min(floor_heights)
-        global_max_floor = max(floor_heights)
-    else:
-        base_floor = 0
-        global_min_floor = 0
-        global_max_floor = 0
-
-    print(f"Floor heights: min={global_min_floor}, base={base_floor}, max={global_max_floor}", file=sys.stderr)
-
-    # Strategy: Create main floor as a single large rectangular brush
-    # Then create separate brushes for "holes" (other sectors)
-    # This avoids the cutting plane approach which creates visible seams
-
-    # Find map bounds to create the main floor rectangle
-    all_vertices = []
-    for sector in sectors:
-        if 'sidedefs' in sector and sector['sidedefs']:
-            for sidedef in sector['sidedefs']:
-                if 'linedefs' in sidedef:
-                    for linedef in sidedef['linedefs']:
-                        all_vertices.append(linedef['vertex1'])
-                        all_vertices.append(linedef['vertex2'])
-
-    if all_vertices:
-        main_minx = min(v[0] for v in all_vertices)
-        main_maxx = max(v[0] for v in all_vertices)
-        main_miny = min(v[1] for v in all_vertices)
-        main_maxy = max(v[1] for v in all_vertices)
-    else:
-        main_minx = main_miny = 0
-        main_maxx = main_maxy = 512
-
-    print(f"Map extents: x=[{main_minx}, {main_maxx}], y=[{main_miny}, {main_maxy}]", file=sys.stderr)
-
-    # First pass: create main floor as a single rectangular brush
-    # For the base floor height, create one large rectangle instead of subsector-by-subsector
-    slab = 8
-
-    # Create main rectangular floor and ceiling for the base floor level
-    main_floor_x = main_minx + OFFSET - 128
-    main_floor_y = main_miny + OFFSET - 128
-    main_floor_w = (main_maxx - main_minx) + 256
-    main_floor_h = (main_maxy - main_miny) + 256
-
-    # Floor slab (below the main floor)
-    main_floor_brush = generateRect3d(
-        (main_floor_x, main_floor_y, base_floor - slab),
-        (main_floor_w, main_floor_h, slab),
-        comment="// MAIN FLOOR slab"
-    )
-    if main_floor_brush:
-        brushes.append(main_floor_brush)
-        print(f"Brush {len(brushes)-1}: MAIN FLOOR z={base_floor-slab} h={slab}", file=sys.stderr)
-
-    # Ceiling slab (above the max ceiling)
-    main_ceil_brush = generateRect3d(
-        (main_floor_x, main_floor_y, global_max_floor),
-        (main_floor_w, main_floor_h, slab),
-        comment="// MAIN CEILING slab"
-    )
-    if main_ceil_brush:
-        brushes.append(main_ceil_brush)
-        print(f"Brush {len(brushes)-1}: MAIN CEILING z={global_max_floor} h={slab}", file=sys.stderr)
-
-    # Second pass: create brushes for non-main sectors (raised platforms, pits, etc.)
     for sector_idx, sector in enumerate(sectors):
         if 'sidedefs' not in sector or not sector['sidedefs']:
             continue
@@ -426,123 +350,222 @@ def buildBySectors():
         if ceil <= floor:
             continue
 
-        # Skip the base floor sector - it's already created as main rectangular brush above
-        if floor == base_floor:
+        edges = []
+        linedefs = []
+        seen_linedefs = set()
+        for sidedef in sector['sidedefs']:
+            if 'linedefs' not in sidedef:
+                continue
+            for linedef in sidedef['linedefs']:
+                linedef_key = (linedef['v1'], linedef['v2'])
+                if linedef_key in seen_linedefs:
+                    continue
+                seen_linedefs.add(linedef_key)
+
+                edges.append((linedef['vertex1'], linedef['vertex2']))
+                linedefs.append(linedef)
+
+                # Track which sectors each linedef connects
+                key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
+                if key not in linedef_to_sectors:
+                    linedef_to_sectors[key] = []
+                linedef_to_sectors[key].append((floor, ceil))
+
+        # Use subsectors if available, otherwise fall back to polygon ordering
+        slab = 8
+
+        if use_subsectors and sector_idx in sector_subsectors:
+            # Use pre-computed convex subsector polygons
+            for subsector_poly in sector_subsectors[sector_idx]:
+                # Expand polygon by 0.5 units to eliminate gaps between adjacent subsectors
+                expanded_poly = expand_polygon(subsector_poly, 0.5)
+
+                # Apply offset
+                poly = [(x + OFFSET, y + OFFSET) for (x, y) in expanded_poly]
+
+                # Generate floor and ceiling for this convex subsector
+                # NOTE: floor is below actual floor height, ceiling is above actual ceiling height
+                floor_brushes = generateCutRectSector(poly, floor - slab, slab, comment=f'// Sector {sector_idx} subsector floor')
+                ceil_brushes = generateCutRectSector(poly, ceil, slab, comment=f'// Sector {sector_idx} subsector ceiling')
+
+                if floor_brushes:
+                    for brush in floor_brushes:
+                        brushes.append(brush)
+                        import sys
+                        print(f"Brush {len(brushes)-1}: Sector {sector_idx} subsector floor z={floor-slab} h={slab}", file=sys.stderr)
+                if ceil_brushes:
+                    for brush in ceil_brushes:
+                        brushes.append(brush)
+                        import sys
+                        print(f"Brush {len(brushes)-1}: Sector {sector_idx} subsector ceiling z={ceil} h={slab}", file=sys.stderr)
+
+                # Update bounds
+                for px, py in poly:
+                    if px < minx: minx = px
+                    if px > maxx: maxx = px
+                    if py < miny: miny = py
+                    if py > maxy: maxy = py
+
             if first_floor is None:
                 first_floor = floor
             if floor < minz: minz = floor
             if ceil > maxz: maxz = ceil
             continue
 
-        # For non-base sectors (raised platforms, pits), create simple rectangular brushes
-        edges = []
+        # Fallback: use original polygon ordering approach
+        poly = order_polygon(edges)
+        if len(poly) < 3:
+            print(f"WARNING: Sector {sector_idx} has invalid polygon (< 3 vertices), using bounding box fallback")
+            # Use bounding box fallback for sectors with broken polygon ordering
+            if len(edges) > 0:
+                verts = []
+                for e1, e2 in edges:
+                    verts.append(e1)
+                    verts.append(e2)
+                if len(verts) >= 3:
+                    minx_p = min(v[0] for v in verts)
+                    maxx_p = max(v[0] for v in verts)
+                    miny_p = min(v[1] for v in verts)
+                    maxy_p = max(v[1] for v in verts)
+
+                    slab = 8
+                    brushes.append(generateRect3d((minx_p + OFFSET, miny_p + OFFSET, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+                    brushes.append(generateRect3d((minx_p + OFFSET, miny_p + OFFSET, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+
+                    if first_floor is None:
+                        first_floor = floor
+
+                    if minx_p < minx: minx = minx_p
+                    if maxx_p > maxx: maxx = maxx_p
+                    if miny_p < miny: miny = miny_p
+                    if maxy_p > maxy: maxy = maxy_p
+                    if floor < minz: minz = floor
+                    if ceil > maxz: maxz = ceil
+            continue
+
+        poly = [(x + OFFSET, y + OFFSET) for (x, y) in poly]
+        tris = triangulate(poly)
+
+        if not tris:
+            print(f"WARNING: Sector {sector_idx} triangulation failed, using bounding box fallback")
+            # Triangulation failed - create bounding box fallback
+            minx_p = min(p[0] for p in poly)
+            maxx_p = max(p[0] for p in poly)
+            miny_p = min(p[1] for p in poly)
+            maxy_p = max(p[1] for p in poly)
+
+            slab = 8
+            # Create floor and ceiling slabs from bounding box
+            brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+            brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab)))
+
+            if first_floor is None:
+                first_floor = floor
+
+            if minx_p < minx: minx = minx_p
+            if maxx_p > maxx: maxx = maxx_p
+            if miny_p < miny: miny = miny_p
+            if maxy_p > maxy: maxy = maxy_p
+            if floor < minz: minz = floor
+            if ceil > maxz: maxz = ceil
+            continue
+
+        # Use cutting planes for proper sector shapes, fallback to bounding box if needed
+        slab = 8
+        floor_brushes = generateCutRectSector(poly, floor - slab, slab, comment=f'// Sector {sector_idx} floor')
+        ceil_brushes = generateCutRectSector(poly, ceil, slab, comment=f'// Sector {sector_idx} ceiling')
+
+        # Fallback to bounding box if cutting planes failed
+        if not floor_brushes or not ceil_brushes:
+            for brush in floor_brushes or []:
+                brushes.append(brush)
+                import sys
+                print(f"Brush {len(brushes)-1}: Sector {sector_idx} FALLBACK floor z={floor-slab} h={slab}", file=sys.stderr)
+            for brush in ceil_brushes or []:
+                brushes.append(brush)
+                import sys
+                print(f"Brush {len(brushes)-1}: Sector {sector_idx} FALLBACK ceiling z={ceil} h={slab}", file=sys.stderr)
+        if not floor_brushes or not ceil_brushes:
+            minx_p = min(p[0] for p in poly)
+            maxx_p = max(p[0] for p in poly)
+            miny_p = min(p[1] for p in poly)
+            maxy_p = max(p[1] for p in poly)
+
+            if not floor_brushes:
+                brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} floor'))
+            else:
+                brushes.extend(floor_brushes)
+
+            if not ceil_brushes:
+                brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} ceiling'))
+            else:
+                brushes.extend(ceil_brushes)
+        else:
+            brushes.extend(floor_brushes)
+            brushes.extend(ceil_brushes)
+
+        if first_floor is None:
+            first_floor = floor
+
+        for p in poly:
+            if p[0] < minx: minx = p[0]
+            if p[0] > maxx: maxx = p[0]
+            if p[1] < miny: miny = p[1]
+            if p[1] > maxy: maxy = p[1]
+        if floor < minz: minz = floor
+        if ceil > maxz: maxz = ceil
+
+    # Second pass: generate walls for linedefs
+    # Create walls for one-sided linedefs and step walls for height differences
+    seen = set()
+
+    # Need to access all linedefs with their sidedef info
+    # We'll collect them from sectors but track which have been processed
+    for sector in sectors:
+        if 'sidedefs' not in sector or not sector['sidedefs']:
+            continue
+
+        sector_floor = sector['heightFloor']
+        sector_ceil = sector['heightCeil']
+
         for sidedef in sector['sidedefs']:
             if 'linedefs' not in sidedef:
                 continue
             for linedef in sidedef['linedefs']:
-                edges.append((linedef['vertex1'], linedef['vertex2']))
+                key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
+                if key in seen:
+                    continue
+                seen.add(key)
 
-        if edges:
-            # Get bounding box for this sector
-            verts = []
-            for v1, v2 in edges:
-                verts.append(v1)
-                verts.append(v2)
+                v1 = (linedef['vertex1'][0] + OFFSET, linedef['vertex1'][1] + OFFSET)
+                v2 = (linedef['vertex2'][0] + OFFSET, linedef['vertex2'][1] + OFFSET)
 
-            minx_p = min(v[0] for v in verts)
-            maxx_p = max(v[0] for v in verts)
-            miny_p = min(v[1] for v in verts)
-            maxy_p = max(v[1] for v in verts)
+                # One-sided linedefs: create full wall
+                if linedef['side2'] == 65535:
+                    brushes.append(generateLine(v1, v2, (sector_floor, sector_ceil), drawpoints=False))
+                # Two-sided linedefs: compare front and back sectors
+                else:
+                    # Get front sector (current sector)
+                    front_floor = sector_floor
+                    front_ceil = sector_ceil
 
-            width = maxx_p - minx_p
-            depth = maxy_p - miny_p
+                    # Get back sector using side2 index
+                    back_sidedef = sidedefs[linedef['side2']]
+                    back_sector = sectors[back_sidedef['sector']]
+                    back_floor = back_sector['heightFloor']
+                    back_ceil = back_sector['heightCeil']
 
-            if width > 0 and depth > 0:
-                # Create floor brush
-                floor_brush = generateRect3d(
-                    (minx_p + OFFSET, miny_p + OFFSET, floor - slab),
-                    (width, depth, slab),
-                    comment=f'// Sector {sector_idx} floor'
-                )
-                if floor_brush:
-                    brushes.append(floor_brush)
-                    print(f"Brush {len(brushes)-1}: Sector {sector_idx} floor z={floor-slab} h={slab}", file=sys.stderr)
+                    # Create lower wall if floors differ
+                    if front_floor != back_floor:
+                        min_floor = min(front_floor, back_floor)
+                        max_floor = max(front_floor, back_floor)
+                        brushes.append(generateLine(v1, v2, (min_floor, max_floor), drawpoints=False))
 
-                # Create ceiling brush
-                ceil_brush = generateRect3d(
-                    (minx_p + OFFSET, miny_p + OFFSET, ceil),
-                    (width, depth, slab),
-                    comment=f'// Sector {sector_idx} ceiling'
-                )
-                if ceil_brush:
-                    brushes.append(ceil_brush)
-                    print(f"Brush {len(brushes)-1}: Sector {sector_idx} ceiling z={ceil} h={slab}", file=sys.stderr)
-
-                # Update bounds
-                if minx_p < minx: minx = minx_p
-                if maxx_p > maxx: maxx = maxx_p
-                if miny_p < miny: miny = miny_p
-                if maxy_p > maxy: maxy = maxy_p
-
-        if first_floor is None:
-            first_floor = floor
-        if floor < minz: minz = floor
-        if ceil > maxz: maxz = ceil
-
-    # DEBUG: WALLS DISABLED - focusing on floors/ceilings only
-    print(f"DEBUG: Wall generation DISABLED for debugging", file=sys.stderr)
-
-    # # Second pass: generate walls for linedefs
-    # # Create walls for one-sided linedefs and step walls for height differences
-    # seen = set()
-
-    # # Need to access all linedefs with their sidedef info
-    # # We'll collect them from sectors but track which have been processed
-    # for sector in sectors:
-    #     if 'sidedefs' not in sector or not sector['sidedefs']:
-    #         continue
-
-    #     sector_floor = sector['heightFloor']
-    #     sector_ceil = sector['heightCeil']
-
-    #     for sidedef in sector['sidedefs']:
-    #         if 'linedefs' not in sidedef:
-    #             continue
-    #         for linedef in sidedef['linedefs']:
-    #             key = tuple(sorted([linedef['vertex1'], linedef['vertex2']]))
-    #             if key in seen:
-    #                 continue
-    #             seen.add(key)
-
-    #             v1 = (linedef['vertex1'][0] + OFFSET, linedef['vertex1'][1] + OFFSET)
-    #             v2 = (linedef['vertex2'][0] + OFFSET, linedef['vertex2'][1] + OFFSET)
-
-    #             # One-sided linedefs: create full wall
-    #             if linedef['side2'] == 65535:
-    #                 brushes.append(generateLine(v1, v2, (sector_floor, sector_ceil), drawpoints=False))
-    #             # Two-sided linedefs: compare front and back sectors
-    #             else:
-    #                 # Get front sector (current sector)
-    #                 front_floor = sector_floor
-    #                 front_ceil = sector_ceil
-
-    #                 # Get back sector using side2 index
-    #                 back_sidedef = sidedefs[linedef['side2']]
-    #                 back_sector = sectors[back_sidedef['sector']]
-    #                 back_floor = back_sector['heightFloor']
-    #                 back_ceil = back_sector['heightCeil']
-
-    #                 # Create lower wall if floors differ
-    #                 if front_floor != back_floor:
-    #                     min_floor = min(front_floor, back_floor)
-    #                     max_floor = max(front_floor, max_floor)
-    #                     brushes.append(generateLine(v1, v2, (min_floor, max_floor), drawpoints=False))
-
-    #                 # Create upper wall if ceilings differ
-    #                 if front_ceil != back_ceil:
-    #                     min_ceil = min(front_ceil, back_ceil)
-    #                     max_ceil = max(front_ceil, back_ceil)
-    #                     brushes.append(generateLine(v1, v2, (min_ceil, max_ceil), drawpoints=False))
+                    # Create upper wall if ceilings differ
+                    if front_ceil != back_ceil:
+                        min_ceil = min(front_ceil, back_ceil)
+                        max_ceil = max(front_ceil, back_ceil)
+                        brushes.append(generateLine(v1, v2, (min_ceil, max_ceil), drawpoints=False))
 
     if minx == 1e9:
         minx, miny, maxx, maxy, minz, maxz = -4096, -4096, 4096, 4096, -1024, 1024

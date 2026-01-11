@@ -122,8 +122,8 @@ def getPlaneString(plane: tuple) -> str:
 
 def plane_from_normal_point(normal: tuple, point: tuple) -> tuple:
     """Create plane from normal pointing OUTWARD and point on plane.
-    In idTech4: plane equation is nx*x + ny*y + nz*z = d
-    Negative halfspace is inside (solid), positive is outside (void)."""
+    In idTech4: negative halfspace is inside (solid), positive is outside (void).
+    So normals should point away from the brush interior."""
     nx, ny, nz = normal
     length = math.sqrt(nx * nx + ny * ny + nz * nz)
     if length == 0:
@@ -131,9 +131,9 @@ def plane_from_normal_point(normal: tuple, point: tuple) -> tuple:
     nx /= length
     ny /= length
     nz /= length
-    # Calculate d using the plane equation: nx*px + ny*py + nz*pz = d
+    # Keep normal pointing outward (no inversion needed)
     px, py, pz = point
-    d = nx * px + ny * py + nz * pz
+    d = -(nx * px + ny * py + nz * pz)
     return (nx, ny, nz, d)
 
 def generateBrushDef3(brushes: tuple, comment='// primitive', indent=4) -> str:
@@ -175,24 +175,13 @@ def generateLine(v1:tuple, v2:tuple, height:tuple=(0, 8), indent=4, width=8, dra
     linevector = Vec2.getDirectionFromPoints(x1, y1, x2, y2)
     length = linevector.length()
     if length == 0:
-        import sys
-        print(f"WARNING: generateLine called with zero-length line, skipping", file=sys.stderr)
-        return ""
-
-    # Validate height range
-    h_min = min(height[0], height[1])
-    h_max = max(height[0], height[1])
-    wall_height = h_max - h_min
-    if wall_height <= 0:
-        import sys
-        print(f"WARNING: generateLine called with zero or negative height ({height[0]} to {height[1]}), skipping", file=sys.stderr)
-        return ""
+        raise Exception('Zero-length line')
 
     dir = linevector.normalize()
     right = dir.perp().normalize()
 
-    origin = (x1 - right.x * width / 2, y1 - right.y * width / 2, h_min)
-    brush = generateRect3d(origin, (length, width, wall_height), rotation=dir.angleDeg())
+    origin = (x1 - right.x * width / 2, y1 - right.y * width / 2, height[0])
+    brush = generateRect3d(origin, (length, width, height[1] - height[0]), rotation=dir.angleDeg())
 
     return brush + ((generatePoint(v1, height[0]) + generatePoint(v2, height[1])) if drawpoints else '')
 

@@ -117,11 +117,14 @@ vanilla2doom3/
 4. **Deduplication**: Remove duplicate/mirrored planes before brush generation to prevent dmap warnings
 5. **Sector Association**: Both side1 and side2 references need processing for complete geometry coverage
 
+## TODO
+
+- **Merge Coplanar Adjacent Subsectors**: Add optimization to merge coplanar adjacent subsectors to reduce brush count while maintaining geometric correctness
+
 ## Future Enhancement Opportunities
 
 - Entity conversion (spawning points, item locations, monster placements)
 - Texture mapping preservation
 - Special sector effect translation
-- More sophisticated polygon simplification for better non-rectangular rendering
 - Sector-to-entity mapping for secret areas and special regions
 - Performance optimization for large maps

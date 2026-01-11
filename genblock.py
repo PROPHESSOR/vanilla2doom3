@@ -227,6 +227,13 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
     x, y, z = position
     width, depth, height = size
 
+    # Validate dimensions
+    if width <= 0 or depth <= 0 or height <= 0:
+        import sys
+        print(f"WARNING: generateRect3d called with invalid size: {size}, skipping", file=sys.stderr)
+        # Return empty string instead of raising exception
+        return ""
+
     forward = Vec2(1.0, 0).rotate(rotation).normalize()
     right = forward.perp().normalize()
 
@@ -260,17 +267,58 @@ def generateRect3d(position: tuple, size:tuple, indent=4, comment=None, rotation
 
 def generateCutRectSector(polygon, z: float, height: float, indent=4, comment=None) -> list:
     '''Generate a rectangular surface for a sector with cutting planes to match polygon boundary.
-    Uses a bounding box with cutting planes: creates rectangle then cuts edges with planes.'''
+    Uses a bounding box with cutting planes: creates rectangle then cuts edges with planes.
+
+    Args:
+        polygon: List of (x, y) coordinates defining the boundary
+        z: Z coordinate of the slab bottom
+        height: Height of the slab
+        indent: Indentation for output
+        comment: Comment for the brush
+    '''
 
     if len(polygon) < 3:
         return []
 
+    # Validate height
+    if height <= 0:
+        return []
+
+    # Calculate polygon area to determine winding order (CCW if positive)
+    area = 0
+    for i in range(len(polygon)):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % len(polygon)]
+        area += x1 * y2 - x2 * y1
+    area = area / 2
+
+    # Skip degenerate polygons
+    if area == 0:
+        return []
+
+    # Calculate polygon centroid for normal direction verification
+    cx = sum(p[0] for p in polygon) / len(polygon)
+    cy = sum(p[1] for p in polygon) / len(polygon)
+
     # Bottom and top planes (these define the height)
+    # Bottom normal points DOWN (outward/void-ward), top normal points UP
     bottom = plane_from_normal_point((0, 0, -1), (polygon[0][0], polygon[0][1], z))
     top = plane_from_normal_point((0, 0, 1), (polygon[0][0], polygon[0][1], z + height))
 
     planes = [bottom, top]
     seen_planes = set()
+
+    # Track bottom/top planes in deduplication set
+    bottom_key = (round(bottom[0], 5), round(bottom[1], 5), round(bottom[2], 5), round(bottom[3], 1))
+    top_key = (round(top[0], 5), round(top[1], 5), round(top[2], 5), round(top[3], 1))
+    seen_planes.add(bottom_key)
+    seen_planes.add(top_key)
+
+    # # Track bottom/top planes in deduplication set
+    # bottom_key = (round(bottom[0], 5), round(bottom[1], 5), round(bottom[2], 5), round(bottom[3], 1))
+    # top_key = (round(top[0], 5), round(top[1], 5), round(top[2], 5), round(top[3], 1))
+    # seen_planes.add(bottom_key)
+    # seen_planes.add(top_key)
 
     # Add cutting planes for each edge of the polygon
     for i in range(len(polygon)):
@@ -282,13 +330,31 @@ def generateCutRectSector(polygon, z: float, height: float, indent=4, comment=No
         ey = p2[1] - p1[1]
 
         # Outward normal (perpendicular to edge, pointing away from solid)
-        # For CCW polygon edge, rotate 90° clockwise to get outward normal
-        nx = -ey
-        ny = ex
+        if area >= 0:
+            # CCW winding: rotate 90° counterclockwise to get outward normal
+            nx = -ey
+            ny = ex
+        else:
+            # CW winding: rotate 90° clockwise to get outward normal
+            nx = ey
+            ny = -ex
+
         length = math.sqrt(nx * nx + ny * ny)
         if length > 0:
             nx /= length
             ny /= length
+
+        # Verify normal points outward from centroid
+        edge_midx = (p1[0] + p2[0]) / 2
+        edge_midy = (p1[1] + p2[1]) / 2
+        to_center_x = cx - edge_midx
+        to_center_y = cy - edge_midy
+        dot = nx * to_center_x + ny * to_center_y
+
+        # If dot product is positive, normal points toward center (inward), so flip it
+        if dot > 0:
+            nx = -nx
+            ny = -ny
 
         # Create cutting plane
         cut_plane = plane_from_normal_point((nx, ny, 0), (p1[0], p1[1], z))
@@ -302,7 +368,10 @@ def generateCutRectSector(polygon, z: float, height: float, indent=4, comment=No
     if len(planes) < 4:
         return []
 
-    brush_str = generateBrushDef3(tuple(planes), comment if comment else f'// CutRect z={z} h={height}', indent=indent)
+    # Create detailed comment showing parameters and resulting planes
+    detailed_comment = f'{comment if comment else "// CutRect"} [z={z} h={height} -> bottom_z={z} top_z={z+height}]'
+    detailed_comment += f'\n    // Bottom plane: {bottom}, Top plane: {top}'
+    brush_str = generateBrushDef3(tuple(planes), detailed_comment, indent=indent)
     return [brush_str]
 
 
@@ -357,13 +426,18 @@ def generateBox(x, y, z, size, width=8, indent=4) -> str:
 
 def generateMapFromBrushes(brushes: list, playerstart: tuple):
     px, py, pz = playerstart
+    import sys
+    print(f"DEBUG: generateMapFromBrushes received playerstart=({px}, {py}, {pz})", file=sys.stderr)
     lines = []
     lines.append('Version 2')
     lines.append('// Map')
     lines.append('{')
     lines.append('    "classname" "worldspawn"')
 
-    for brush in brushes: lines.append(brush)
+    # Filter out empty brushes
+    for brush in brushes:
+        if brush and brush.strip():
+            lines.append(brush)
 
     lines.append('}')
 

@@ -149,7 +149,7 @@ def parseSectors() -> list:
             sidedef['linedefs'] = []
 
         sidedef['linedefs'].append(linedef)
-        
+
         # Also process side2 (back side) if it exists
         if linedef['side2'] != 65535:
             sidedef2 = sidedefs[linedef['side2']]
@@ -189,6 +189,56 @@ def parsePlayerStart() -> tuple:
             return (thing['x'], thing['y'])
 
     return (None, None)
+
+def parseSegs() -> list:
+    """Parse SEGS.lmp - each seg is 12 bytes:
+    - Start vertex (2 bytes)
+    - End vertex (2 bytes)
+    - Angle (2 bytes)
+    - Linedef (2 bytes)
+    - Direction: 0=same as linedef, 1=opposite (2 bytes)
+    - Offset along linedef (2 bytes)
+    """
+    seg_stream = open('wad/SEGS.lmp', 'rb')
+    seg = ByteTools(seg_stream)
+    segs = []
+
+    while True:
+        try:
+            segs.append({
+                'startVertex': seg.parseUInt16(),
+                'endVertex': seg.parseUInt16(),
+                'angle': seg.parseInt16(),
+                'linedef': seg.parseUInt16(),
+                'direction': seg.parseUInt16(),
+                'offset': seg.parseInt16(),
+            })
+        except IOError:
+            break
+
+    seg_stream.close()
+    return segs
+
+def parseSubsectors() -> list:
+    """Parse SSECTORS.lmp - each subsector is 4 bytes:
+    - Seg count (2 bytes)
+    - First seg index (2 bytes)
+    """
+    ssector_stream = open('wad/SSECTORS.lmp', 'rb')
+    ss = ByteTools(ssector_stream)
+    subsectors = []
+
+    while True:
+        try:
+            subsectors.append({
+                'segCount': ss.parseUInt16(),
+                'firstSeg': ss.parseUInt16(),
+            })
+        except IOError:
+            break
+
+    ssector_stream.close()
+    return subsectors
 
 if __name__ == "__main__":
     main()

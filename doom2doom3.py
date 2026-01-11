@@ -1,5 +1,6 @@
-from wadparser import parseLines, parseSectors, parsePlayerStart
+from wadparser import parseLines, parseSectors, parsePlayerStart, parseSegs, parseSubsectors
 from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox, generateTriPrism, generateCutRectSector
+import math
 
 OFFSET = 2000
 
@@ -11,6 +12,31 @@ def polygon_area(poly):
         x2, y2 = poly[(i + 1) % len(poly)]
         area += x1 * y2 - x2 * y1
     return area / 2
+
+
+def expand_polygon(poly, amount):
+    """Expand polygon by pushing vertices outward from centroid"""
+    if len(poly) < 3:
+        return poly
+
+    # Calculate centroid
+    cx = sum(x for x, y in poly) / len(poly)
+    cy = sum(y for x, y in poly) / len(poly)
+
+    # Push each vertex outward from centroid
+    expanded = []
+    for x, y in poly:
+        dx = x - cx
+        dy = y - cy
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist > 0.001:  # Avoid division by zero
+            nx = dx / dist
+            ny = dy / dist
+            expanded.append((x + nx * amount, y + ny * amount))
+        else:
+            expanded.append((x, y))
+
+    return expanded
 
 
 def order_polygon(edges):
@@ -169,12 +195,140 @@ def main():
     buildBySectors()
     # buildTestSingleSector()
 
+def group_subsectors_by_sector(subsectors, segs, linedefs, sidedefs, vertices):
+    """Group subsectors by their parent sector.
+
+    Returns a dict: {sector_index: [list of subsector polygons]}
+    Each subsector polygon is a list of (x, y) vertex coordinates in order.
+    """
+    sector_subsectors = {}
+    failed_subsectors = []
+
+    # Build a list of sidedefs for each linedef direction
+    linedef_sides = {}
+    for sidedef_idx, sidedef in enumerate(sidedefs):
+        sector_idx = sidedef['sector']
+        # Track which sidedefs belong to which sectors
+        if sector_idx not in linedef_sides:
+            linedef_sides[sector_idx] = []
+        linedef_sides[sector_idx].append(sidedef_idx)
+
+    for ss_idx, subsector in enumerate(subsectors):
+        seg_count = subsector['segCount']
+        first_seg = subsector['firstSeg']
+
+        # Extract vertices from this subsector's segs
+        poly_vertices = []
+        sector_candidates = []
+
+        for i in range(seg_count):
+            if first_seg + i >= len(segs):
+                break
+
+            seg = segs[first_seg + i]
+            v_idx = seg['startVertex']
+
+            if v_idx >= len(vertices):
+                continue
+
+            poly_vertices.append(vertices[v_idx])
+
+            # Determine which sector this subsector belongs to
+            linedef_idx = seg['linedef']
+            if linedef_idx < len(linedefs):
+                linedef = linedefs[linedef_idx]
+
+                # Try both sides to find a valid sidedef
+                for side_idx in [linedef['side1'], linedef['side2']]:
+                    if side_idx != 65535 and side_idx < len(sidedefs):
+                        sector_idx = sidedefs[side_idx]['sector']
+                        if sector_idx not in sector_candidates:
+                            sector_candidates.append(sector_idx)
+
+        # Choose the most common sector candidate
+        sector_idx = None
+        if sector_candidates:
+            # Use the first (most frequently encountered) candidate
+            sector_idx = sector_candidates[0]
+
+        # Add this subsector polygon to its parent sector
+        if sector_idx is not None and len(poly_vertices) >= 3:
+            if sector_idx not in sector_subsectors:
+                sector_subsectors[sector_idx] = []
+            sector_subsectors[sector_idx].append(poly_vertices)
+        else:
+            failed_subsectors.append((ss_idx, len(poly_vertices), sector_idx))
+
+    if failed_subsectors:
+        missing_verts = len([x for x in failed_subsectors if x[1] < 3])
+        print(f"WARNING: {len(failed_subsectors)} subsectors failed (missing {missing_verts} with <3 verts, {len(failed_subsectors) - missing_verts} with no sector)")
+
+    return sector_subsectors
+
 def buildBySectors():
     ps = parsePlayerStart()
     sectors, sidedefs = parseSectors()
+
+    # Parse BSP subsector data
+    try:
+        segs = parseSegs()
+        subsectors = parseSubsectors()
+        # We also need vertices and linedefs for subsector processing
+        from wadparser import parseSectors as parseSectorsRaw
+        # Need to get vertices and linedefs - let me extract from existing parseSectors
+        vertices = []
+        linedefs = []
+        # Parse them manually for now
+        from ByteTools import ByteTools
+
+        vertex_stream = open('wad/VERTEXES.lmp', 'rb')
+        vert = ByteTools(vertex_stream)
+        while True:
+            try:
+                vertices.append((vert.parseInt16(), vert.parseInt16()))
+            except IOError:
+                break
+        vertex_stream.close()
+
+        linedef_stream = open('wad/LINEDEFS.lmp', 'rb')
+        lined = ByteTools(linedef_stream)
+        while True:
+            try:
+                linedefs.append({
+                    'v1': lined.parseUInt16(),
+                    'v2': lined.parseUInt16(),
+                    'flags': lined.parseUInt16(),
+                    'type': lined.parseUInt16(),
+                    'tag': lined.parseUInt16(),
+                    'side1': lined.parseUInt16(),
+                    'side2': lined.parseUInt16(),
+                })
+            except IOError:
+                break
+        linedef_stream.close()
+
+        # Get sidedef list
+        sidedef_list = []
+        for sector in sectors:
+            if 'sidedefs' in sector:
+                for sidedef in sector['sidedefs']:
+                    sidedef_list.append(sidedef)
+
+        sector_subsectors = group_subsectors_by_sector(subsectors, segs, linedefs, sidedef_list, vertices)
+        use_subsectors = True  # Re-enabled - fallback fails on non-convex sectors
+        print(f"Successfully parsed {len(subsectors)} subsectors, grouped into {len(sector_subsectors)} sectors")
+    except Exception as e:
+        print(f"WARNING: Failed to parse subsectors ({e}), falling back to polygon ordering")
+        sector_subsectors = {}
+        use_subsectors = False
+
     px, py = ps
     if px is None or py is None:
         px, py = (0, 0)
+
+    import sys
+    print(f"Player start: px={px}, py={py}, After OFFSET: ({px + OFFSET}, {py + OFFSET})", file=sys.stderr)
+
     brushes = []
 
     minx = 1e9
@@ -217,6 +371,48 @@ def buildBySectors():
                     linedef_to_sectors[key] = []
                 linedef_to_sectors[key].append((floor, ceil))
 
+        # Use subsectors if available, otherwise fall back to polygon ordering
+        slab = 8
+
+        if use_subsectors and sector_idx in sector_subsectors:
+            # Use pre-computed convex subsector polygons
+            for subsector_poly in sector_subsectors[sector_idx]:
+                # Expand polygon by 0.5 units to eliminate gaps between adjacent subsectors
+                expanded_poly = expand_polygon(subsector_poly, 0.5)
+
+                # Apply offset
+                poly = [(x + OFFSET, y + OFFSET) for (x, y) in expanded_poly]
+
+                # Generate floor and ceiling for this convex subsector
+                # NOTE: floor is below actual floor height, ceiling is above actual ceiling height
+                floor_brushes = generateCutRectSector(poly, floor - slab, slab, comment=f'// Sector {sector_idx} subsector floor')
+                ceil_brushes = generateCutRectSector(poly, ceil, slab, comment=f'// Sector {sector_idx} subsector ceiling')
+
+                if floor_brushes:
+                    for brush in floor_brushes:
+                        brushes.append(brush)
+                        import sys
+                        print(f"Brush {len(brushes)-1}: Sector {sector_idx} subsector floor z={floor-slab} h={slab}", file=sys.stderr)
+                if ceil_brushes:
+                    for brush in ceil_brushes:
+                        brushes.append(brush)
+                        import sys
+                        print(f"Brush {len(brushes)-1}: Sector {sector_idx} subsector ceiling z={ceil} h={slab}", file=sys.stderr)
+
+                # Update bounds
+                for px, py in poly:
+                    if px < minx: minx = px
+                    if px > maxx: maxx = px
+                    if py < miny: miny = py
+                    if py > maxy: maxy = py
+
+            if first_floor is None:
+                first_floor = floor
+            if floor < minz: minz = floor
+            if ceil > maxz: maxz = ceil
+            continue
+
+        # Fallback: use original polygon ordering approach
         poly = order_polygon(edges)
         if len(poly) < 3:
             print(f"WARNING: Sector {sector_idx} has invalid polygon (< 3 vertices), using bounding box fallback")
@@ -274,12 +470,21 @@ def buildBySectors():
             if ceil > maxz: maxz = ceil
             continue
 
-# Use cutting planes for proper sector shapes, fallback to bounding box if needed
+        # Use cutting planes for proper sector shapes, fallback to bounding box if needed
         slab = 8
         floor_brushes = generateCutRectSector(poly, floor - slab, slab, comment=f'// Sector {sector_idx} floor')
         ceil_brushes = generateCutRectSector(poly, ceil, slab, comment=f'// Sector {sector_idx} ceiling')
 
         # Fallback to bounding box if cutting planes failed
+        if not floor_brushes or not ceil_brushes:
+            for brush in floor_brushes or []:
+                brushes.append(brush)
+                import sys
+                print(f"Brush {len(brushes)-1}: Sector {sector_idx} FALLBACK floor z={floor-slab} h={slab}", file=sys.stderr)
+            for brush in ceil_brushes or []:
+                brushes.append(brush)
+                import sys
+                print(f"Brush {len(brushes)-1}: Sector {sector_idx} FALLBACK ceiling z={ceil} h={slab}", file=sys.stderr)
         if not floor_brushes or not ceil_brushes:
             minx_p = min(p[0] for p in poly)
             maxx_p = max(p[0] for p in poly)
@@ -365,35 +570,57 @@ def buildBySectors():
     if minx == 1e9:
         minx, miny, maxx, maxy, minz, maxz = -4096, -4096, 4096, 4096, -1024, 1024
 
-    # Add outer sealing layer - simple thick walls around the entire map
-    seal_width = 128
+    # Debug: print bounds
+    import sys
+    print(f"Map bounds: x=[{minx}, {maxx}], y=[{miny}, {maxy}], z=[{minz}, {maxz}]", file=sys.stderr)
+    print(f"Total brushes before sealing: {len(brushes)}", file=sys.stderr)
 
-    # Extend beyond all geometry
-    outer_minx = minx - seal_width
-    outer_miny = miny - seal_width
-    outer_maxx = maxx + seal_width
-    outer_maxy = maxy + seal_width
-    outer_minz = minz - seal_width
-    outer_maxz = maxz + seal_width
+    # Create a simple sealed box for visual debugging
+    # Large margin to ensure we enclose everything
+    margin = 256
+    box_minx = minx - margin
+    box_miny = miny - margin
+    box_minz = minz - margin
+    box_maxx = maxx + margin
+    box_maxy = maxy + margin
+    box_maxz = maxz + margin
 
-    # Create 6 solid sealing brushes (one for each side of the bounding box)
-    brushes.append(generateRect3d((outer_minx, outer_miny, outer_minz),
-                                   (seal_width, outer_maxy - outer_miny, outer_maxz - outer_minz)))  # left
-    brushes.append(generateRect3d((outer_maxx - seal_width, outer_miny, outer_minz),
-                                   (seal_width, outer_maxy - outer_miny, outer_maxz - outer_minz)))  # right
-    brushes.append(generateRect3d((outer_minx, outer_miny, outer_minz),
-                                   (outer_maxx - outer_minx, seal_width, outer_maxz - outer_minz)))  # front
-    brushes.append(generateRect3d((outer_minx, outer_maxy - seal_width, outer_minz),
-                                   (outer_maxx - outer_minx, seal_width, outer_maxz - outer_minz)))  # back
-    brushes.append(generateRect3d((outer_minx, outer_miny, outer_minz),
-                                   (outer_maxx - outer_minx, outer_maxy - outer_miny, seal_width)))  # floor
-    brushes.append(generateRect3d((outer_minx, outer_miny, outer_maxz - seal_width),
-                                   (outer_maxx - outer_minx, outer_maxy - outer_miny, seal_width)))  # ceiling
+    wall_thickness = 64
+
+    print(f"Creating sealed box: x=[{box_minx}, {box_maxx}], y=[{box_miny}, {box_maxy}], z=[{box_minz}, {box_maxz}]", file=sys.stderr)
+
+    # Create 6 solid walls (one huge brush per wall)
+    # Left wall (west)
+    brushes.append(generateRect3d((box_minx, box_miny, box_minz),
+                                   (wall_thickness, box_maxy - box_miny, box_maxz - box_minz),
+                                   comment="// Seal: West wall"))
+    # Right wall (east)
+    brushes.append(generateRect3d((box_maxx - wall_thickness, box_miny, box_minz),
+                                   (wall_thickness, box_maxy - box_miny, box_maxz - box_minz),
+                                   comment="// Seal: East wall"))
+    # Front wall (south)
+    brushes.append(generateRect3d((box_minx, box_miny, box_minz),
+                                   (box_maxx - box_minx, wall_thickness, box_maxz - box_minz),
+                                   comment="// Seal: South wall"))
+    # Back wall (north)
+    brushes.append(generateRect3d((box_minx, box_maxy - wall_thickness, box_minz),
+                                   (box_maxx - box_minx, wall_thickness, box_maxz - box_minz),
+                                   comment="// Seal: North wall"))
+    # Bottom (floor)
+    brushes.append(generateRect3d((box_minx, box_miny, box_minz),
+                                   (box_maxx - box_minx, box_maxy - box_miny, wall_thickness),
+                                   comment="// Seal: Bottom"))
+    # Top (ceiling)
+    brushes.append(generateRect3d((box_minx, box_miny, box_maxz - wall_thickness),
+                                   (box_maxx - box_minx, box_maxy - box_miny, wall_thickness),
+                                   comment="// Seal: Top"))
+
+    print(f"Total brushes after sealing: {len(brushes)}", file=sys.stderr)
 
     pz = (first_floor if first_floor is not None else 0) + 16
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, pz)))
+        _out.write(generateMapFromBrushes(brushes, (px, py, pz)))
 
 def getBorders(lines: list) -> list:
     ''' [(minx, miny), (maxx, maxy)] '''

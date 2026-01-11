@@ -1,6 +1,7 @@
 from wadparser import parseLines, parseSectors, parsePlayerStart, parseSegs, parseSubsectors
 from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox, generateTriPrism, generateCutRectSector
 import math
+import xml.etree.ElementTree as ET
 
 OFFSET = 2000
 
@@ -157,6 +158,45 @@ def tri_area(a, b, c):
     return abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
 
 
+def _dedupe_points(points):
+    seen = set()
+    out = []
+    for p in points:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def convex_hull(points):
+    """Monotone chain convex hull. Returns points ordered around the hull.
+    Subsectors are convex, so the hull matches the boundary.
+    """
+    pts = _dedupe_points(points)
+    if len(pts) < 3:
+        return pts
+
+    pts = sorted(pts)
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower = []
+    for p in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    upper = []
+    for p in reversed(pts):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    hull = lower[:-1] + upper[:-1]
+    return hull
+
+
 def buildTestSingleSector():
     """Build a simple sealed test room to verify brush normals are correct."""
     from genblock import generateRect3d, generateMapFromBrushes
@@ -191,8 +231,427 @@ def buildTestSingleSector():
         _out.write(generateMapFromBrushes(brushes, (x + size/2, y + size/2, z + 32)))
 
 
+def export_subsectors_to_svg(subsectors, segs, vertices, sectors, sidedefs_indexed, linedefs, filename='subsectors.svg'):
+    """Export subsectors to SVG for visualization."""
+    import sys
+
+    # Find bounds
+    all_x = [v[0] for v in vertices]
+    all_y = [v[1] for v in vertices]
+    minx, maxx = min(all_x), max(all_x)
+    miny, maxy = min(all_y), max(all_y)
+
+    width = maxx - minx
+    height = maxy - miny
+    margin = 50
+
+    # SVG canvas size
+    svg_width = width + 2 * margin
+    svg_height = height + 2 * margin
+
+    # Create SVG root
+    svg = ET.Element('svg', {
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'width': str(int(svg_width)),
+        'height': str(int(svg_height)),
+        'viewBox': f'{minx - margin} {miny - margin} {int(svg_width)} {int(svg_height)}'
+    })
+
+    # Add background
+    ET.SubElement(svg, 'rect', {
+        'x': str(minx - margin),
+        'y': str(miny - margin),
+        'width': str(int(svg_width)),
+        'height': str(int(svg_height)),
+        'fill': 'white'
+    })
+
+    # Color palette for different sectors
+    colors = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+        '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B195', '#C06C84',
+        '#6C5B7B', '#355C7D', '#F67280', '#C8E6C9', '#FFCCBC'
+    ]
+
+    # Process each subsector
+    degenerate_ss = []
+    for ss_idx, subsector in enumerate(subsectors):
+        seg_count = subsector['segCount']
+        first_seg = subsector['firstSeg']
+
+        # Collect both start and end vertices then take convex hull
+        pts = []
+        sector_idx = None
+        sector_counts = {}
+
+        for i in range(seg_count):
+            if first_seg + i >= len(segs):
+                break
+
+            seg = segs[first_seg + i]
+            v_start = seg['startVertex']
+            v_end = seg['endVertex']
+
+            if v_start < len(vertices):
+                pts.append(vertices[v_start])
+            if v_end < len(vertices):
+                pts.append(vertices[v_end])
+
+            # Determine sector
+            linedef_idx = seg['linedef']
+            if linedef_idx < len(linedefs):
+                linedef = linedefs[linedef_idx]
+                # Majority vote among candidate sectors from both sides
+                for side_idx in (linedef['side1'], linedef['side2']):
+                    if side_idx != 65535 and side_idx < len(sidedefs_indexed):
+                        sidx = sidedefs_indexed[side_idx]['sector']
+                        sector_counts[sidx] = sector_counts.get(sidx, 0) + 1
+        # Decide sector by majority
+        if sector_counts:
+            sector_idx = max(sector_counts.items(), key=lambda kv: kv[1])[0]
+
+        poly_vertices = convex_hull(pts)
+        if len(poly_vertices) < 3:
+            degenerate_ss.append(ss_idx)
+            # Still draw its segs later for debugging
+            continue
+        if sector_idx is None or sector_idx >= len(sectors):
+            # Unknown sector, skip fill but keep for edge overlay
+            degenerate_ss.append(ss_idx)
+            continue
+
+        # Get sector info
+        sector = sectors[sector_idx]
+        floor = sector['heightFloor']
+        ceil = sector['heightCeil']
+
+        # Choose color based on sector
+        color = colors[sector_idx % len(colors)]
+
+        # Create polygon
+        points = ' '.join([f'{x},{y}' for x, y in poly_vertices])
+
+        # Draw filled polygon
+        ET.SubElement(svg, 'polygon', {
+            'points': points,
+            'fill': color,
+            'fill-opacity': '0.6',
+            'stroke': 'black',
+            'stroke-width': '1'
+        })
+
+        # Add label at centroid
+        cx = sum(x for x, y in poly_vertices) / len(poly_vertices)
+        cy = sum(y for x, y in poly_vertices) / len(poly_vertices)
+
+        ET.SubElement(svg, 'text', {
+            'x': str(cx),
+            'y': str(cy),
+            'font-size': '8',
+            'text-anchor': 'middle',
+            'fill': 'black'
+        }).text = f'SS{ss_idx}\nS{sector_idx}'
+
+    # Draw all vertices as small circles
+    for i, (x, y) in enumerate(vertices):
+        ET.SubElement(svg, 'circle', {
+            'cx': str(x),
+            'cy': str(y),
+            'r': '2',
+            'fill': 'red'
+        })
+
+    # Overlay: draw all seg edges for context
+    for ss_idx, subsector in enumerate(subsectors):
+        seg_count = subsector['segCount']
+        first_seg = subsector['firstSeg']
+        for i in range(seg_count):
+            si = first_seg + i
+            if si >= len(segs):
+                break
+            s = segs[si]
+            v0 = s['startVertex']
+            v1 = s['endVertex']
+            if v0 < len(vertices) and v1 < len(vertices):
+                x1, y1 = vertices[v0]
+                x2, y2 = vertices[v1]
+                ET.SubElement(svg, 'line', {
+                    'x1': str(x1), 'y1': str(y1),
+                    'x2': str(x2), 'y2': str(y2),
+                    'stroke': '#000000',
+                    'stroke-width': '0.8',
+                    'opacity': '0.35'
+                })
+
+    # Outline degenerate subsectors in red
+    for ss_idx in degenerate_ss:
+        seg_count = subsector['segCount'] if 0 else 0
+    for ss_idx, subsector in enumerate(subsectors):
+        if ss_idx not in degenerate_ss:
+            continue
+        seg_count = subsector['segCount']
+        first_seg = subsector['firstSeg']
+        for i in range(seg_count):
+            si = first_seg + i
+            if si >= len(segs):
+                break
+            s = segs[si]
+            v0 = s['startVertex']
+            v1 = s['endVertex']
+            if v0 < len(vertices) and v1 < len(vertices):
+                x1, y1 = vertices[v0]
+                x2, y2 = vertices[v1]
+                ET.SubElement(svg, 'line', {
+                    'x1': str(x1), 'y1': str(y1),
+                    'x2': str(x2), 'y2': str(y2),
+                    'stroke': '#ff0000',
+                    'stroke-width': '1.6',
+                    'opacity': '0.8'
+                })
+
+    # Write to file
+    tree = ET.ElementTree(svg)
+    ET.indent(tree, space='  ')
+    tree.write(filename, encoding='utf-8', xml_declaration=True)
+
+    print(f"Exported subsectors to {filename}", file=sys.stderr)
+
+
+def buildBySubsectors():
+    """Build level geometry directly from subsectors - floors/ceilings only, no walls for debugging."""
+    ps = parsePlayerStart()
+    sectors, sidedefs = parseSectors()
+
+    # Parse BSP subsector data
+    segs = parseSegs()
+    subsectors = parseSubsectors()
+
+    # Parse vertices and linedefs
+    from ByteTools import ByteTools
+
+    vertex_stream = open('wad/VERTEXES.lmp', 'rb')
+    vert = ByteTools(vertex_stream)
+    vertices = []
+    while True:
+        try:
+            vertices.append((vert.parseInt16(), vert.parseInt16()))
+        except IOError:
+            break
+    vertex_stream.close()
+
+    linedef_stream = open('wad/LINEDEFS.lmp', 'rb')
+    lined = ByteTools(linedef_stream)
+    linedefs = []
+    while True:
+        try:
+            linedefs.append({
+                'v1': lined.parseUInt16(),
+                'v2': lined.parseUInt16(),
+                'flags': lined.parseUInt16(),
+                'type': lined.parseUInt16(),
+                'tag': lined.parseUInt16(),
+                'side1': lined.parseUInt16(),
+                'side2': lined.parseUInt16(),
+            })
+        except IOError:
+            break
+    linedef_stream.close()
+
+    # Use indexed sidedefs directly (linedef side indices refer to this list)
+    print(f"Parsed {len(vertices)} vertices, {len(linedefs)} linedefs, {len(sidedefs)} sidedefs, {len(sectors)} sectors")
+    print(f"Parsed {len(subsectors)} subsectors, {len(segs)} segs")
+
+    # Export to SVG for visualization (hull-ordered), write to a new filename
+    export_subsectors_to_svg(subsectors, segs, vertices, sectors, sidedefs, linedefs, 'subsectors_debug_hull.svg')
+
+    px, py = ps
+    if px is None or py is None:
+        px, py = (0, 0)
+
+    import sys
+    print(f"Player start: px={px}, py={py}, After OFFSET: ({px + OFFSET}, {py + OFFSET})", file=sys.stderr)
+
+    brushes = []
+    minx = 1e9
+    miny = 1e9
+    maxx = -1e9
+    maxy = -1e9
+    minz = 1e9
+    maxz = -1e9
+    first_floor = None
+
+    slab = 8  # Floor/ceiling thickness
+
+    skipped_count = 0
+    skipped_reasons = {'no_sector': 0, 'not_enough_verts': 0, 'invalid_sector': 0, 'no_height': 0}
+
+    # Process each subsector directly
+    for ss_idx, subsector in enumerate(subsectors):
+        seg_count = subsector['segCount']
+        first_seg = subsector['firstSeg']
+
+        # Extract vertices from this subsector's segs
+        # Collect both start and end vertices; compute convex hull for stable ordering
+        pts = []
+        sector_idx = None
+
+        # Collect candidate sectors for majority vote
+        sector_counts = {}
+
+        for i in range(seg_count):
+            seg_idx = first_seg + i
+            if seg_idx >= len(segs):
+                break
+
+            seg = segs[seg_idx]
+            v_start_idx = seg['startVertex']
+            v_end_idx = seg['endVertex']
+
+            if v_start_idx >= len(vertices):
+                continue
+            if v_end_idx < len(vertices):
+                pts.append(vertices[v_end_idx])
+            pts.append(vertices[v_start_idx])
+
+            # Tally candidate sectors from both sides of each linedef
+            linedef_idx = seg['linedef']
+            if linedef_idx != 65535 and linedef_idx < len(linedefs):
+                linedef = linedefs[linedef_idx]
+                for side_idx in (linedef['side1'], linedef['side2']):
+                    if side_idx != 65535 and side_idx < len(sidedefs):
+                        sidx = sidedefs[side_idx]['sector']
+                        sector_counts[sidx] = sector_counts.get(sidx, 0) + 1
+
+        # Choose majority sector if any candidates were found
+        if sector_counts:
+            sector_idx = max(sector_counts.items(), key=lambda kv: kv[1])[0]
+
+        # Build polygon via convex hull (subsectors are convex)
+        poly_vertices = convex_hull(pts)
+
+        if len(poly_vertices) < 3:
+            print(f"WARNING: Subsector {ss_idx} has only {len(poly_vertices)} hull vertices (seg_count={seg_count})", file=sys.stderr)
+            skipped_count += 1
+            skipped_reasons['not_enough_verts'] += 1
+            continue
+
+        # Skip if we couldn't determine sector or don't have enough vertices
+        if sector_idx is None:
+            skipped_count += 1
+            skipped_reasons['no_sector'] += 1
+            continue
+
+        if sector_idx >= len(sectors):
+            skipped_count += 1
+            skipped_reasons['invalid_sector'] += 1
+            continue
+
+        if len(poly_vertices) < 3:
+            skipped_count += 1
+            skipped_reasons['not_enough_verts'] += 1
+            continue
+
+        sector = sectors[sector_idx]
+        floor = sector['heightFloor']
+        ceil = sector['heightCeil']
+
+        if ceil <= floor:
+            skipped_count += 1
+            skipped_reasons['no_height'] += 1
+            continue
+
+        # Expand polygon slightly to eliminate gaps
+        expanded_poly = expand_polygon(poly_vertices, 0.5)
+
+        # Apply offset
+        poly = [(x + OFFSET, y + OFFSET) for (x, y) in expanded_poly]
+
+        # Generate floor and ceiling brushes for this subsector
+        floor_brushes = generateCutRectSector(poly, floor - slab, slab, comment=f'// Subsector {ss_idx} floor (sector {sector_idx})')
+        ceil_brushes = generateCutRectSector(poly, ceil, slab, comment=f'// Subsector {ss_idx} ceiling (sector {sector_idx})')
+
+        if floor_brushes:
+            brushes.extend(floor_brushes)
+            print(f"Subsector {ss_idx}: added {len(floor_brushes)} floor brushes (sector {sector_idx}, z={floor-slab}, h={slab})", file=sys.stderr)
+        if ceil_brushes:
+            brushes.extend(ceil_brushes)
+            print(f"Subsector {ss_idx}: added {len(ceil_brushes)} ceiling brushes (sector {sector_idx}, z={ceil}, h={slab})", file=sys.stderr)
+
+        # Update bounds
+        for px_coord, py_coord in poly:
+            if px_coord < minx: minx = px_coord
+            if px_coord > maxx: maxx = px_coord
+            if py_coord < miny: miny = py_coord
+            if py_coord > maxy: maxy = py_coord
+
+        if first_floor is None:
+            first_floor = floor
+        if floor < minz: minz = floor
+        if ceil > maxz: maxz = ceil
+
+    print(f"\nSubsector processing stats:", file=sys.stderr)
+    print(f"  Total subsectors: {len(subsectors)}", file=sys.stderr)
+    print(f"  Processed: {len(subsectors) - skipped_count}", file=sys.stderr)
+    print(f"  Skipped: {skipped_count}", file=sys.stderr)
+    if skipped_count > 0:
+        print(f"    No sector: {skipped_reasons['no_sector']}", file=sys.stderr)
+        print(f"    Not enough verts: {skipped_reasons['not_enough_verts']}", file=sys.stderr)
+        print(f"    Invalid sector: {skipped_reasons['invalid_sector']}", file=sys.stderr)
+        print(f"    No height: {skipped_reasons['no_height']}", file=sys.stderr)
+
+    if minx == 1e9:
+        minx, miny, maxx, maxy, minz, maxz = -4096, -4096, 4096, 4096, -1024, 1024
+
+    # Debug: print bounds
+    print(f"Map bounds: x=[{minx}, {maxx}], y=[{miny}, {maxy}], z=[{minz}, {maxz}]", file=sys.stderr)
+    print(f"Total brushes before sealing: {len(brushes)}", file=sys.stderr)
+
+    # Create sealed box around the level
+    margin = 256
+    box_minx = minx - margin
+    box_miny = miny - margin
+    box_minz = minz - margin
+    box_maxx = maxx + margin
+    box_maxy = maxy + margin
+    box_maxz = maxz + margin
+
+    wall_thickness = 64
+
+    print(f"Creating sealed box: x=[{box_minx}, {box_maxx}], y=[{box_miny}, {box_maxy}], z=[{box_minz}, {box_maxz}]", file=sys.stderr)
+
+    # Create 6 solid walls
+    brushes.append(generateRect3d((box_minx, box_miny, box_minz),
+                                   (wall_thickness, box_maxy - box_miny, box_maxz - box_minz),
+                                   comment="// Seal: West wall"))
+    brushes.append(generateRect3d((box_maxx - wall_thickness, box_miny, box_minz),
+                                   (wall_thickness, box_maxy - box_miny, box_maxz - box_minz),
+                                   comment="// Seal: East wall"))
+    brushes.append(generateRect3d((box_minx, box_miny, box_minz),
+                                   (box_maxx - box_minx, wall_thickness, box_maxz - box_minz),
+                                   comment="// Seal: South wall"))
+    brushes.append(generateRect3d((box_minx, box_maxy - wall_thickness, box_minz),
+                                   (box_maxx - box_minx, wall_thickness, box_maxz - box_minz),
+                                   comment="// Seal: North wall"))
+    brushes.append(generateRect3d((box_minx, box_miny, box_minz),
+                                   (box_maxx - box_minx, box_maxy - box_miny, wall_thickness),
+                                   comment="// Seal: Bottom"))
+    brushes.append(generateRect3d((box_minx, box_miny, box_maxz - wall_thickness),
+                                   (box_maxx - box_minx, box_maxy - box_miny, wall_thickness),
+                                   comment="// Seal: Top"))
+
+    print(f"Total brushes after sealing: {len(brushes)}", file=sys.stderr)
+
+    pz = (first_floor if first_floor is not None else 0) + 16
+
+    with open('doom2doom3.map', 'w') as _out:
+        _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, pz)))
+
+    print(f"\nGenerated {len(brushes)} total brushes from {len(subsectors)} subsectors")
+    print(f"Map saved to doom2doom3.map")
+
 def main():
-    buildBySectors()
+    buildBySubsectors()
+    # buildBySectors()
     # buildTestSingleSector()
 
 def group_subsectors_by_sector(subsectors, segs, linedefs, sidedefs, vertices):
@@ -620,7 +1079,10 @@ def buildBySectors():
     pz = (first_floor if first_floor is not None else 0) + 16
 
     with open('doom2doom3.map', 'w') as _out:
-        _out.write(generateMapFromBrushes(brushes, (px, py, pz)))
+        _out.write(generateMapFromBrushes(brushes, (px + OFFSET, py + OFFSET, pz)))
+
+    print(f"\nGenerated {len(brushes)} total brushes from {len(subsectors)} subsectors")
+    print(f"Map saved to doom2doom3.map")
 
 def getBorders(lines: list) -> list:
     ''' [(minx, miny), (maxx, maxy)] '''

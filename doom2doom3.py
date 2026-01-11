@@ -312,21 +312,54 @@ def export_subsectors_to_svg(subsectors, segs, vertices, sectors, sidedefs_index
 
         poly_vertices = convex_hull(pts)
         if len(poly_vertices) < 3:
+            # Draw thin strips along segs so SVG matches map fallback
             degenerate_ss.append(ss_idx)
-            # Still draw its segs later for debugging
+            strip_width = 8.0
+            def seg_strip(p1, p2, width):
+                dx = p2[0] - p1[0]
+                dy = p2[1] - p1[1]
+                L = math.hypot(dx, dy)
+                if L < 1e-6:
+                    return None
+                nx = dy / L
+                ny = -dx / L
+                hw = width * 0.5
+                a = (p1[0] + nx * hw, p1[1] + ny * hw)
+                b = (p1[0] - nx * hw, p1[1] - ny * hw)
+                c = (p2[0] - nx * hw, p2[1] - ny * hw)
+                d = (p2[0] + nx * hw, p2[1] + ny * hw)
+                return [a, b, c, d]
+
+            for i in range(seg_count):
+                if first_seg + i >= len(segs):
+                    break
+                s = segs[first_seg + i]
+                v0 = s['startVertex']
+                v1 = s['endVertex']
+                if v0 < len(vertices) and v1 < len(vertices):
+                    rect = seg_strip(vertices[v0], vertices[v1], strip_width)
+                    if rect:
+                        ET.SubElement(svg, 'polygon', {
+                            'points': ' '.join([f"{x},{y}" for (x,y) in rect]),
+                            'fill': '#FFD54F',
+                            'fill-opacity': '0.6',
+                            'stroke': 'black',
+                            'stroke-width': '0.6'
+                        })
             continue
+
+        # Handle missing or invalid sector - still draw with a fallback color
         if sector_idx is None or sector_idx >= len(sectors):
-            # Unknown sector, skip fill but keep for edge overlay
             degenerate_ss.append(ss_idx)
-            continue
-
-        # Get sector info
-        sector = sectors[sector_idx]
-        floor = sector['heightFloor']
-        ceil = sector['heightCeil']
-
-        # Choose color based on sector
-        color = colors[sector_idx % len(colors)]
+            # Draw with gray fallback color for unknown sector
+            color = '#CCCCCC'
+        else:
+            # Get sector info
+            sector = sectors[sector_idx]
+            floor = sector['heightFloor']
+            ceil = sector['heightCeil']
+            # Choose color based on sector
+            color = colors[sector_idx % len(colors)]
 
         # Create polygon
         points = ' '.join([f'{x},{y}' for x, y in poly_vertices])
@@ -525,28 +558,99 @@ def buildBySubsectors():
         # Choose majority sector if any candidates were found
         if sector_counts:
             sector_idx = max(sector_counts.items(), key=lambda kv: kv[1])[0]
+        else:
+            print(f"WARNING: Subsector {ss_idx} has no valid sector candidates (seg_count={seg_count})", file=sys.stderr)
 
         # Build polygon via convex hull (subsectors are convex)
         poly_vertices = convex_hull(pts)
 
         if len(poly_vertices) < 3:
+            # Fallback: emit thin strips along segs to avoid visible gaps
             print(f"WARNING: Subsector {ss_idx} has only {len(poly_vertices)} hull vertices (seg_count={seg_count})", file=sys.stderr)
-            skipped_count += 1
-            skipped_reasons['not_enough_verts'] += 1
+
+            # Decide sector if possible
+            if 'sector_counts' in locals() and sector_counts:
+                sector_idx = max(sector_counts.items(), key=lambda kv: kv[1])[0]
+            if sector_idx is None or sector_idx >= len(sectors):
+                skipped_count += 1
+                skipped_reasons['not_enough_verts'] += 1
+                continue
+
+            sector = sectors[sector_idx]
+            floor = sector['heightFloor']
+            ceil = sector['heightCeil']
+            if ceil <= floor:
+                skipped_count += 1
+                skipped_reasons['no_height'] += 1
+                continue
+
+            def seg_strip(p1, p2, width):
+                dx = p2[0] - p1[0]
+                dy = p2[1] - p1[1]
+                L = math.hypot(dx, dy)
+                if L < 1e-6:
+                    return None
+                nx = dy / L
+                ny = -dx / L
+                hw = width * 0.5
+                a = (p1[0] + nx * hw, p1[1] + ny * hw)
+                b = (p1[0] - nx * hw, p1[1] - ny * hw)
+                c = (p2[0] - nx * hw, p2[1] - ny * hw)
+                d = (p2[0] + nx * hw, p2[1] + ny * hw)
+                return [a, b, c, d]
+
+            strip_width = 8.0
+            floor_slab = 8
+            for i in range(seg_count):
+                seg_idx = first_seg + i
+                if seg_idx >= len(segs):
+                    break
+                seg = segs[seg_idx]
+                v0 = seg['startVertex']
+                v1 = seg['endVertex']
+                if v0 >= len(vertices) or v1 >= len(vertices):
+                    continue
+                p1 = vertices[v0]
+                p2 = vertices[v1]
+                rect = seg_strip(p1, p2, strip_width)
+                if not rect:
+                    continue
+                poly = [(x + OFFSET, y + OFFSET) for (x, y) in rect]
+                floor_brushes = generateCutRectSector(poly, floor - floor_slab, floor_slab, comment=f'// Subsector {ss_idx} seg-strip floor')
+                ceil_brushes = generateCutRectSector(poly, ceil, floor_slab, comment=f'// Subsector {ss_idx} seg-strip ceiling')
+                for br in floor_brushes or []:
+                    brushes.append(br)
+                for br in ceil_brushes or []:
+                    brushes.append(br)
+                for px_coord, py_coord in poly:
+                    if px_coord < minx: minx = px_coord
+                    if px_coord > maxx: maxx = px_coord
+                    if py_coord < miny: miny = py_coord
+                    if py_coord > maxy: maxy = py_coord
+
+            if first_floor is None:
+                first_floor = floor
+            if floor < minz: minz = floor
+            if ceil > maxz: maxz = ceil
+
+            # Count as processed even if strips only
             continue
 
         # Skip if we couldn't determine sector or don't have enough vertices
         if sector_idx is None:
+            print(f"SKIP: Subsector {ss_idx} has no sector (hull verts={len(poly_vertices)})", file=sys.stderr)
             skipped_count += 1
             skipped_reasons['no_sector'] += 1
             continue
 
         if sector_idx >= len(sectors):
+            print(f"SKIP: Subsector {ss_idx} has invalid sector {sector_idx} >= {len(sectors)}", file=sys.stderr)
             skipped_count += 1
             skipped_reasons['invalid_sector'] += 1
             continue
 
         if len(poly_vertices) < 3:
+            print(f"SKIP: Subsector {ss_idx} still has < 3 vertices after strip fallback", file=sys.stderr)
             skipped_count += 1
             skipped_reasons['not_enough_verts'] += 1
             continue
@@ -556,6 +660,7 @@ def buildBySubsectors():
         ceil = sector['heightCeil']
 
         if ceil <= floor:
+            print(f"SKIP: Subsector {ss_idx} sector {sector_idx} has invalid height floor={floor} ceil={ceil}", file=sys.stderr)
             skipped_count += 1
             skipped_reasons['no_height'] += 1
             continue
@@ -604,6 +709,65 @@ def buildBySubsectors():
 
     # Debug: print bounds
     print(f"Map bounds: x=[{minx}, {maxx}], y=[{miny}, {maxy}], z=[{minz}, {maxz}]", file=sys.stderr)
+    print(f"Total brushes before walls: {len(brushes)}", file=sys.stderr)
+
+    # Generate walls from linedefs
+    print(f"\nGenerating walls from linedefs...", file=sys.stderr)
+    seen_linedefs = set()
+    wall_count = 0
+
+    for linedef_idx, linedef in enumerate(linedefs):
+        if linedef_idx in seen_linedefs:
+            continue
+        seen_linedefs.add(linedef_idx)
+
+        v1 = (vertices[linedef['v1']][0] + OFFSET, vertices[linedef['v1']][1] + OFFSET)
+        v2 = (vertices[linedef['v2']][0] + OFFSET, vertices[linedef['v2']][1] + OFFSET)
+
+        side1_idx = linedef['side1']
+        side2_idx = linedef['side2']
+
+        # One-sided linedef: create full wall
+        if side2_idx == 65535:
+            if side1_idx != 65535 and side1_idx < len(sidedefs):
+                sector_idx = sidedefs[side1_idx]['sector']
+                if sector_idx < len(sectors):
+                    sector = sectors[sector_idx]
+                    floor = sector['heightFloor']
+                    ceil = sector['heightCeil']
+                    if ceil > floor:
+                        brushes.append(generateLine(v1, v2, (floor, ceil), drawpoints=False))
+                        wall_count += 1
+        # Two-sided linedef: check for height differences
+        else:
+            if side1_idx != 65535 and side1_idx < len(sidedefs) and side2_idx < len(sidedefs):
+                sector1_idx = sidedefs[side1_idx]['sector']
+                sector2_idx = sidedefs[side2_idx]['sector']
+
+                if sector1_idx < len(sectors) and sector2_idx < len(sectors):
+                    sector1 = sectors[sector1_idx]
+                    sector2 = sectors[sector2_idx]
+
+                    floor1 = sector1['heightFloor']
+                    ceil1 = sector1['heightCeil']
+                    floor2 = sector2['heightFloor']
+                    ceil2 = sector2['heightCeil']
+
+                    # Create lower wall if floors differ
+                    if floor1 != floor2:
+                        min_floor = min(floor1, floor2)
+                        max_floor = max(floor1, floor2)
+                        brushes.append(generateLine(v1, v2, (min_floor, max_floor), drawpoints=False))
+                        wall_count += 1
+
+                    # Create upper wall if ceilings differ
+                    if ceil1 != ceil2:
+                        min_ceil = min(ceil1, ceil2)
+                        max_ceil = max(ceil1, ceil2)
+                        brushes.append(generateLine(v1, v2, (min_ceil, max_ceil), drawpoints=False))
+                        wall_count += 1
+
+    print(f"Generated {wall_count} wall brushes from {len(linedefs)} linedefs", file=sys.stderr)
     print(f"Total brushes before sealing: {len(brushes)}", file=sys.stderr)
 
     # Create sealed box around the level

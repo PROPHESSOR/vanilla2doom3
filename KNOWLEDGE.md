@@ -217,12 +217,40 @@ Example: Doom sector with floor=56, ceiling=128:
 - Ceiling brush: z=128 to z=136 (8 units thick, bottom at head-bump height)
 - Playable space: z=56 to z=128 (72 units of vertical clearance)
 
+## Degenerate Subsector Handling
+
+### Problem
+BSP subsectors sometimes produce degenerate polygons with:
+- **Zero or near-zero area** (collinear vertices, duplicates, or self-intersecting)
+- **Very small positive area** (numerical precision issues)
+- Both CCW and CW winding orders
+
+These degenerate subsectors cause cutting plane generation to fail or produce invalid geometry, resulting in "backwards triangle" warnings during dmap compilation.
+
+### Solution
+Filter out subsectors with area < 1.0 square units before calling `generateCutRectSector`:
+
+```python
+subsector_area = polygon_area(subsector_poly)
+if abs(subsector_area) < 1.0:
+    print(f"WARNING: degenerate polygon (area={subsector_area:.1f}), skipping")
+    continue
+```
+
+This eliminates nearly all degenerate geometry without affecting valid sectors. Other non-degenerate subsectors in the same sector still generate valid brushes.
+
+### Testing Impact
+- Example: Sector 17 had 7 degenerate subsectors that were filtered out
+- Remaining valid subsectors generate proper floor/ceiling brushes
+- Reduces "backwards triangle" warnings during compilation
+
 ## Conversion Strategy: Doom → idTech 4
 1. Parse all WAD lumps (VERTEXES, SECTORS, SEGS, SSECTORS, etc.)
 2. Group subsectors by parent sector (trace through SEGS → LINEDEFS → SIDEDEFS → SECTORS)
 3. For each sector:
-   - Generate floor brushes from all subsector polygons at sector floor height
-   - Generate ceiling brushes from all subsector polygons at sector ceiling height
+   - Filter degenerate subsectors (area < 1.0 units²)
+   - Generate floor brushes from remaining subsector polygons at sector floor height
+   - Generate ceiling brushes from remaining subsector polygons at sector ceiling height
 4. Add global offset (e.g., +2000 on x,y) to avoid negative coordinates
 5. Use appropriate slab thickness (e.g., 8 units)
 

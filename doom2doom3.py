@@ -1,5 +1,5 @@
 from wadparser import parseLines, parseSectors, parsePlayerStart
-from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox, generateTriPrism
+from genblock import generateRect3d, generateMapFromBrushes, generateSafeLine, generateLine, generateBox, generateTriPrism, generateCutRectSector
 
 OFFSET = 2000
 
@@ -274,15 +274,30 @@ def buildBySectors():
             if ceil > maxz: maxz = ceil
             continue
 
-# Use simple rectangular bounding boxes - most stable approach
+# Use cutting planes for proper sector shapes, fallback to bounding box if needed
         slab = 8
-        minx_p = min(p[0] for p in poly)
-        maxx_p = max(p[0] for p in poly)
-        miny_p = min(p[1] for p in poly)
-        maxy_p = max(p[1] for p in poly)
+        floor_brushes = generateCutRectSector(poly, floor - slab, slab, comment=f'// Sector {sector_idx} floor')
+        ceil_brushes = generateCutRectSector(poly, ceil, slab, comment=f'// Sector {sector_idx} ceiling')
 
-        brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} floor'))
-        brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} ceiling'))
+        # Fallback to bounding box if cutting planes failed
+        if not floor_brushes or not ceil_brushes:
+            minx_p = min(p[0] for p in poly)
+            maxx_p = max(p[0] for p in poly)
+            miny_p = min(p[1] for p in poly)
+            maxy_p = max(p[1] for p in poly)
+
+            if not floor_brushes:
+                brushes.append(generateRect3d((minx_p, miny_p, floor - slab), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} floor'))
+            else:
+                brushes.extend(floor_brushes)
+
+            if not ceil_brushes:
+                brushes.append(generateRect3d((minx_p, miny_p, ceil), (maxx_p - minx_p, maxy_p - miny_p, slab), comment=f'// Sector {sector_idx} ceiling'))
+            else:
+                brushes.extend(ceil_brushes)
+        else:
+            brushes.extend(floor_brushes)
+            brushes.extend(ceil_brushes)
 
         if first_floor is None:
             first_floor = floor

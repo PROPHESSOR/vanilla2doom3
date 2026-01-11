@@ -281,10 +281,10 @@ def generateCutRectSector(polygon, z: float, height: float, indent=4, comment=No
         ex = p2[0] - p1[0]
         ey = p2[1] - p1[1]
 
-        # Outward normal (perpendicular to edge, for CCW polygon)
-        # For CCW polygon: rotate edge 90 degrees CCW to get inward normal, then negate for outward
-        nx = ey
-        ny = -ex
+        # Outward normal (perpendicular to edge, pointing away from solid)
+        # For CCW polygon edge, rotate 90° clockwise to get outward normal
+        nx = -ey
+        ny = ex
         length = math.sqrt(nx * nx + ny * ny)
         if length > 0:
             nx /= length

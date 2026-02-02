@@ -38,12 +38,10 @@ export class Seg {
   }
 
   get vertex1(): Vertex | undefined {
-    if (this.side === 1) return this.map.vertexes?.[this.endVertex];
     return this.map.vertexes?.[this.startVertex];
   }
 
   get vertex2(): Vertex | undefined {
-    if (this.side === 1) return this.map.vertexes?.[this.startVertex];
     return this.map.vertexes?.[this.endVertex];
   }
 

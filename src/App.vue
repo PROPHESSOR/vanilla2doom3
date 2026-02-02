@@ -141,14 +141,23 @@ interface SegLike {
 
 function subsectorPolygonPoints(segs: SegLike[]): string {
   if (!segs.length) return '';
-  const pts: string[] = [];
+  let points: string[] = [];
   const v1 = segs[0]?.vertex1;
-  if (v1) pts.push(`${parseFloat(v1.x)},${svgY(parseFloat(v1.y))}`);
+  if (v1) points.push(`${parseFloat(v1.x)},${svgY(parseFloat(v1.y))}`);
+  const v2 = segs[0]?.vertex2;
+  if (v2) points.push(`${parseFloat(v2.x)},${svgY(parseFloat(v2.y))}`);
   for (const seg of segs) {
+    const v1 = seg.vertex1;
+    if (v1) points.push(`${parseFloat(v1.x)},${svgY(parseFloat(v1.y))}`);
     const v2 = seg.vertex2;
-    if (v2) pts.push(`${parseFloat(v2.x)},${svgY(parseFloat(v2.y))}`);
+    if (v2) points.push(`${parseFloat(v2.x)},${svgY(parseFloat(v2.y))}`);
   }
-  return pts.join(' ');
+
+  points = Array.from(new Set(points));
+
+  points.push(points[0]!);
+
+  return points.join(' ');
 }
 
 function subsectorStrokeColor(sectorIndex: number | undefined): string {
@@ -280,7 +289,7 @@ const VERTEX_CIRCLE_R = 5;
               :points="subsectorPolygonPoints(ss.segs)" :fill="sectorColors.get(ss.sectorIndex ?? -1) ?? '#444'"
               :stroke="subsectorStrokeColor(ss.sectorIndex)"
               :class="['subsector', { 'subsector--hover': hoveredSubsectorIndex === i }]" @mouseenter="setHover(i)"
-              @mouseleave="setHover(null)" />
+              @mouseleave="setHover(null)" :title="subsectorPolygonPoints(ss.segs)" />
           </g>
           <g v-if="hoveredSubsector" class="vertices-layer">
             <circle v-for="v in hoveredSubsectorVertices" :key="'v-' + v._id" :cx="parseFloat(v.x)"

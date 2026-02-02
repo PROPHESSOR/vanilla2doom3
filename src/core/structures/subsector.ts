@@ -33,4 +33,15 @@ export class Subsector {
     }
     return out;
   }
+
+  get sectorIndex(): number | undefined {
+    const list = this.segs;
+    const seg = list[0];
+    if (!seg) return undefined;
+    const ld = seg.linedefRef;
+    if (!ld) return undefined;
+    const sidedefIndex = seg.side === 0 ? ld.sidefront : ld.sideback;
+    const side = this.map.sidedefs?.[sidedefIndex];
+    return side?.sector;
+  }
 }

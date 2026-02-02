@@ -1,3 +1,7 @@
 wad
 __pycache__
 doom2doom3.map
+.vscode
+*.svg
+*.map
+*.log

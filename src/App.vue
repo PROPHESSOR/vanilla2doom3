@@ -109,7 +109,26 @@ function subsectorPolygonPoints(segs: { vertex1?: { x: string; y: string }; vert
     const v2 = seg.vertex2;
     if (v2) pts.push(`${parseFloat(v2.x)},${svgY(parseFloat(v2.y))}`);
   }
-  return pts.join(' ');
+  const ordered = ensureCounterClockwise(pts);
+  return ordered.join(' ');
+}
+
+function ensureCounterClockwise(pts: string[]): string[] {
+  if (pts.length < 3) return pts;
+  const coords: { x: number; y: number }[] = pts.map((p) => {
+    const [x, y] = p.split(',').map(Number);
+    return { x: x ?? 0, y: y ?? 0 };
+  });
+  let area = 0;
+  const n = coords.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ai = coords[i]!;
+    const aj = coords[j]!;
+    area += ai.x * aj.y - aj.x * ai.y;
+  }
+  if (area < 0) return [...pts].reverse();
+  return pts;
 }
 
 function subsectorStrokeColor(sectorIndex: number | undefined): string {

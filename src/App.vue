@@ -155,6 +155,27 @@ function subsectorPolygonPoints(segs: SegLike[]): string {
 
   points = Array.from(new Set(points));
 
+  // Sort points counter-clockwise around the centroid
+  if (points.length > 2) {
+    // Compute centroid
+    let sumX = 0;
+    let sumY = 0;
+    points.forEach(pt => {
+      const [x, y] = pt.split(',').map(Number);
+      sumX += x!;
+      sumY += y ?? 0;
+    });
+    const centerX = sumX / points.length;
+    const centerY = sumY / points.length;
+    points.sort((a, b) => {
+      const [x1, y1] = a.split(',').map(Number);
+      const [x2, y2] = b.split(',').map(Number);
+      const angleA = Math.atan2(y1! - centerY, x1! - centerX);
+      const angleB = Math.atan2(y2! - centerY, x2! - centerX);
+      return angleA - angleB;
+    });
+  }
+
   points.push(points[0]!);
 
   return points.join(' ');

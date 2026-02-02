@@ -5,6 +5,9 @@
  * https://opensource.org/licenses/MIT
  */
 
+import type { MapParser } from '../MapParser';
+import type { Linedef } from './linedef';
+
 export class Sector {
   declare _id: number;
   declare heightfloor: number;
@@ -16,6 +19,7 @@ export class Sector {
   declare id: number;
 
   constructor(
+    public map: MapParser,
     _id: number,
     floor: number,
     ceiling: number,
@@ -35,6 +39,16 @@ export class Sector {
     this.special = special;
     this.id = tag;
     Object.assign(this, other);
+  }
+
+  get linedefs(): Linedef[] {
+    const lines = this.map.linedefs ?? [];
+    const sides = this.map.sidedefs ?? [];
+    return lines.filter((ld) => {
+      const front = sides[ld.sidefront];
+      const back = ld.sideback >= 0 ? sides[ld.sideback] : null;
+      return front?.sector === this._id || (back && back.sector === this._id);
+    });
   }
 
   toString(): string {

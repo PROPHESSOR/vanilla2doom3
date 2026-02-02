@@ -5,6 +5,10 @@
  * https://opensource.org/licenses/MIT
  */
 
+import type { MapParser } from '../MapParser';
+import type { Vertex } from './vertex';
+import type { Sidedef } from './sidedef';
+
 export interface LinedefArgs {
   arg1?: number;
   arg2?: number;
@@ -33,6 +37,7 @@ export class Linedef {
   declare special: number;
 
   constructor(
+    public map: MapParser,
     _id: number = -1,
     v1: number,
     v2: number,
@@ -63,6 +68,22 @@ export class Linedef {
     }
 
     Object.assign(this, other);
+  }
+
+  get vertex1(): Vertex | undefined {
+    return this.map.vertexes?.[this.v1];
+  }
+
+  get vertex2(): Vertex | undefined {
+    return this.map.vertexes?.[this.v2];
+  }
+
+  get sideFront(): Sidedef | undefined {
+    return this.map.sidedefs?.[this.sidefront];
+  }
+
+  get sideBack(): Sidedef | undefined {
+    return this.sideback >= 0 ? this.map.sidedefs?.[this.sideback] : undefined;
   }
 
   toString(): string {

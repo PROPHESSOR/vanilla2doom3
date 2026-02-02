@@ -5,12 +5,20 @@
  * https://opensource.org/licenses/MIT
  */
 
+import type { MapParser } from '../MapParser';
+
 export class Vertex {
   declare _id: number;
   declare x: string;
   declare y: string;
 
-  constructor(_id: number, x: number, y: number, other: Record<string, unknown> = {}) {
+  constructor(
+    public map: MapParser,
+    _id: number,
+    x: number,
+    y: number,
+    other: Record<string, unknown> = {}
+  ) {
     this._id = _id;
     this.x = x.toFixed(1);
     this.y = y.toFixed(1);

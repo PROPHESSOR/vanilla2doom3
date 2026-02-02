@@ -5,6 +5,8 @@
  * https://opensource.org/licenses/MIT
  */
 
+import type { MapParser } from '../MapParser';
+
 export class Thing {
   declare _id: number;
   declare x: number;
@@ -13,6 +15,7 @@ export class Thing {
   declare type: number;
 
   constructor(
+    public map: MapParser,
     _id: number,
     x: number,
     y: number,

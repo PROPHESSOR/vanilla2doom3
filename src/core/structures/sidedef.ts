@@ -5,6 +5,9 @@
  * https://opensource.org/licenses/MIT
  */
 
+import type { MapParser } from '../MapParser';
+import type { Sector } from './sector';
+
 export class Sidedef {
   declare _id: number;
   declare offsetx: number;
@@ -15,6 +18,7 @@ export class Sidedef {
   declare sector: number;
 
   constructor(
+    public map: MapParser,
     _id: number,
     offsetx: number,
     offsety: number,
@@ -32,6 +36,10 @@ export class Sidedef {
     this.texturemiddle = `"${middletex}"`;
     this.sector = sector;
     Object.assign(this, other);
+  }
+
+  get sectorRef(): Sector | undefined {
+    return this.map.sectors?.[this.sector];
   }
 
   toString(): string {

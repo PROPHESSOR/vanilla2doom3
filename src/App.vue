@@ -100,7 +100,12 @@ const sectorColors = computed(() => {
   return colors;
 });
 
-function subsectorPolygonPoints(segs: { vertex1?: { x: string; y: string }; vertex2?: { x: string; y: string } }[]): string {
+interface SegLike {
+  vertex1?: { x: string; y: string };
+  vertex2?: { x: string; y: string };
+}
+
+function subsectorPolygonPoints(segs: SegLike[]): string {
   if (!segs.length) return '';
   const pts: string[] = [];
   const v1 = segs[0]?.vertex1;
@@ -118,19 +123,56 @@ function subsectorStrokeColor(sectorIndex: number | undefined): string {
   return fill;
 }
 
-function subsectorLines(segs: { vertex1?: { x: string; y: string }; vertex2?: { x: string; y: string } }[]): string[] {
-  return segs.map((seg) => {
-    const v1 = seg.vertex1;
-    const v2 = seg.vertex2;
-    if (!v1 || !v2) return '';
-    return `(${v1.x};${v1.y})-(${v2.x};${v2.y})`;
-  }).filter(Boolean);
-}
 
 const hoveredSubsector = computed(() => {
   const mp = mapParser.value?.subsectors ?? [];
   const i = hoveredSubsectorIndex.value;
   return i != null && i >= 0 && i < mp.length ? mp[i] : null;
+});
+
+const hoveredSubsectorVertices = computed(() => {
+  const ss = hoveredSubsector.value;
+  if (!ss) return [];
+  const byId = new Map<number, { _id: number; x: string; y: string }>();
+  for (const seg of ss.segs) {
+    const v1 = seg.vertex1;
+    const v2 = seg.vertex2;
+    if (v1) byId.set(v1._id, { _id: v1._id, x: v1.x, y: v1.y });
+    if (v2) byId.set(v2._id, { _id: v2._id, x: v2.x, y: v2.y });
+  }
+  return Array.from(byId.values()).sort((a, b) => a._id - b._id);
+});
+
+const hoveredVertexColors = computed(() => {
+  const verts = hoveredSubsectorVertices.value;
+  const map = new Map<number, string>();
+  verts.forEach((v, i) => {
+    const hue = (i * 360) / Math.max(verts.length, 1) % 360;
+    map.set(v._id, `hsl(${hue}, 85%, 58%)`);
+  });
+  return map;
+});
+
+function getVertexColor(vertexId: number): string {
+  return hoveredVertexColors.value.get(vertexId) ?? '#888';
+}
+
+interface LineWithVertices {
+  v1: { _id: number; x: string; y: string };
+  v2: { _id: number; x: string; y: string };
+}
+
+const hoveredSubsectorLines = computed<LineWithVertices[]>(() => {
+  const ss = hoveredSubsector.value;
+  if (!ss) return [];
+  return ss.segs
+    .map((seg) => {
+      const v1 = seg.vertex1;
+      const v2 = seg.vertex2;
+      if (!v1 || !v2) return null;
+      return { v1: { _id: v1._id, x: v1.x, y: v1.y }, v2: { _id: v2._id, x: v2.x, y: v2.y } };
+    })
+    .filter((x): x is LineWithVertices => x != null);
 });
 
 function onMapViewMouseMove(e: MouseEvent) {
@@ -140,6 +182,8 @@ function onMapViewMouseMove(e: MouseEvent) {
 function setHover(i: number | null) {
   hoveredSubsectorIndex.value = i;
 }
+
+const VERTEX_CIRCLE_R = 5;
 </script>
 
 <template>
@@ -152,12 +196,7 @@ function setHover(i: number | null) {
     <section v-if="!wadParser" class="step">
       <label class="file-label">
         <span>Select WAD file</span>
-        <input
-          type="file"
-          accept=".wad"
-          :disabled="loading"
-          @change="onWadSelected"
-        />
+        <input type="file" accept=".wad" :disabled="loading" @change="onWadSelected" />
       </label>
       <p v-if="loading" class="muted">Parsing WAD…</p>
     </section>
@@ -166,10 +205,7 @@ function setHover(i: number | null) {
     <section v-if="wadParser && !mapParser" class="step">
       <h2>Choose map</h2>
       <ul class="map-list">
-        <li
-          v-for="choice in maps"
-          :key="choice.index"
-        >
+        <li v-for="choice in maps" :key="choice.index">
           <button type="button" @click="selectMap(choice)">{{ choice.name }}</button>
         </li>
       </ul>
@@ -178,52 +214,39 @@ function setHover(i: number | null) {
 
     <!-- Step 3: Map view (linedefs) -->
     <section v-if="mapParser" class="step">
-      <div
-        class="map-view"
-        @mousemove="onMapViewMouseMove"
-      >
-        <div
-          v-if="hoveredSubsector"
-          class="tooltip"
-          :style="{ left: tooltipPos.x + 12 + 'px', top: tooltipPos.y + 12 + 'px' }"
-        >
+      <div class="map-view" @mousemove="onMapViewMouseMove">
+        <div v-if="hoveredSubsector" class="tooltip"
+          :style="{ left: tooltipPos.x + 12 + 'px', top: tooltipPos.y + 12 + 'px' }">
           <div class="tooltip-row"><strong>Subsector</strong> {{ hoveredSubsector._id }}</div>
           <div class="tooltip-row"><strong>Sector</strong> {{ hoveredSubsector.sectorIndex ?? '—' }}</div>
           <div class="tooltip-row tooltip-lines">
             <strong>Lines</strong>
             <ul>
-              <li v-for="(line, j) in subsectorLines(hoveredSubsector.segs)" :key="j">{{ line }}</li>
+              <li v-for="(line, j) in hoveredSubsectorLines" :key="j" class="tooltip-line">
+                <span :style="{ color: getVertexColor(line.v1._id) }">({{ line.v1.x }};{{ line.v1.y }})</span>
+                <span>-</span>
+                <span :style="{ color: getVertexColor(line.v2._id) }">({{ line.v2.x }};{{ line.v2.y }})</span>
+              </li>
             </ul>
           </div>
         </div>
-        <svg
-          v-if="mapBounds"
-          :viewBox="svgViewBox"
-          preserveAspectRatio="xMidYMid meet"
-          class="map-svg"
-        >
+        <svg v-if="mapBounds" :viewBox="svgViewBox" preserveAspectRatio="xMidYMid meet" class="map-svg">
           <g class="linedefs-layer">
-            <line
-              v-for="(ld, i) in mapParser.linedefs"
-              :key="'ld-' + i"
-              :x1="ld.vertex1 ? parseFloat(ld.vertex1.x) : 0"
-              :y1="ld.vertex1 ? svgY(parseFloat(ld.vertex1.y)) : 0"
-              :x2="ld.vertex2 ? parseFloat(ld.vertex2.x) : 0"
-              :y2="ld.vertex2 ? svgY(parseFloat(ld.vertex2.y)) : 0"
-              class="linedef"
-            />
+            <line v-for="(ld, i) in mapParser.linedefs" :key="'ld-' + i" :x1="ld.vertex1 ? parseFloat(ld.vertex1.x) : 0"
+              :y1="ld.vertex1 ? svgY(parseFloat(ld.vertex1.y)) : 0" :x2="ld.vertex2 ? parseFloat(ld.vertex2.x) : 0"
+              :y2="ld.vertex2 ? svgY(parseFloat(ld.vertex2.y)) : 0" class="linedef" />
           </g>
           <g class="subsectors-layer">
-            <polygon
-              v-for="(ss, i) in (mapParser.subsectors ?? [])"
-              :key="'ss-' + i"
-              :points="subsectorPolygonPoints(ss.segs)"
-              :fill="sectorColors.get(ss.sectorIndex ?? -1) ?? '#444'"
+            <polygon v-for="(ss, i) in (mapParser.subsectors ?? [])" :key="'ss-' + i"
+              :points="subsectorPolygonPoints(ss.segs)" :fill="sectorColors.get(ss.sectorIndex ?? -1) ?? '#444'"
               :stroke="subsectorStrokeColor(ss.sectorIndex)"
-              :class="['subsector', { 'subsector--hover': hoveredSubsectorIndex === i }]"
-              @mouseenter="setHover(i)"
-              @mouseleave="setHover(null)"
-            />
+              :class="['subsector', { 'subsector--hover': hoveredSubsectorIndex === i }]" @mouseenter="setHover(i)"
+              @mouseleave="setHover(null)" />
+          </g>
+          <g v-if="hoveredSubsector" class="vertices-layer">
+            <circle v-for="v in hoveredSubsectorVertices" :key="'v-' + v._id" :cx="parseFloat(v.x)"
+              :cy="svgY(parseFloat(v.y))" :r="VERTEX_CIRCLE_R" :fill="getVertexColor(v._id)" :stroke="'#fff'"
+              stroke-width="1.5" class="vertex-circle" />
           </g>
         </svg>
       </div>
@@ -341,6 +364,10 @@ h2 {
   stroke-width: 3;
 }
 
+.vertices-layer .vertex-circle {
+  vector-effect: non-scaling-stroke;
+}
+
 .tooltip {
   position: fixed;
   z-index: 10;
@@ -366,11 +393,10 @@ h2 {
 .tooltip-lines ul {
   margin: 0.25rem 0 0;
   padding-left: 1rem;
-  max-height: 120px;
   overflow-y: auto;
 }
 
-.tooltip-lines li {
+.tooltip-line {
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
   word-break: break-all;

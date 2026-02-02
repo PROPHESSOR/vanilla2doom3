@@ -8,4 +8,12 @@
   </p>
 </template>
 
-<style scoped></style>
+<style scoped>
+body {
+  font-family: Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #121212;
+  color: #fff;
+}
+</style>

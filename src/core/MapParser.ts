@@ -10,6 +10,8 @@ import { Linedef } from './structures/linedef';
 import { Sidedef } from './structures/sidedef';
 import { Sector } from './structures/sector';
 import { Thing } from './structures/thing';
+import { Seg } from './structures/seg';
+import { Subsector } from './structures/subsector';
 
 const DOOM_LINEDEF_FLAGS = ['blocking', 'blockmonsters', 'twosided', 'dontpegtop', 'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped'] as const;
 const DOOM_THING_FLAGS = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'ambush', 'single', 'dm', 'coop'] as const;
@@ -19,11 +21,13 @@ export class MapParser {
   sectors: Sector[] | null = null;
   sidedefs: Sidedef[] | null = null;
   things: Thing[] | null = null;
+  segs: Seg[] | null = null;
+  subsectors: Subsector[] | null = null;
 
   constructor(public wad: WadParser) { }
 
   parse(mapIndex: number): void {
-    const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS } = this.wad.getMapLumps(mapIndex);
+    const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS, SEGS, SSECTORS } = this.wad.getMapLumps(mapIndex);
     if (!(THINGS && LINEDEFS && SIDEDEFS && VERTEXES && SECTORS)) {
       throw new Error('Failed to get map lumps');
     }
@@ -39,6 +43,13 @@ export class MapParser {
     this.sectors = this.parseSectors(secBuf);
     this.linedefs = this.parseLinedefs(ldBuf);
     this.things = this.parseThings(thBuf);
+
+    if (SEGS && SSECTORS) {
+      this.segs = this.parseSegs(SEGS.read());
+      this.subsectors = this.parseSubsectors(SSECTORS.read());
+    } else {
+      throw new Error('Currently we rely on SEGS and SSECTORS to be present');
+    }
   }
 
   private parseVertexes(buf: ByteTools): Vertex[] {
@@ -141,6 +152,30 @@ export class MapParser {
       const type = buf.readInt16();
       const flags = decodeFlags(buf.readInt16(), DOOM_THING_FLAGS);
       out.push(new Thing(this, i, x, y, angle, type, flags));
+    }
+    return out;
+  }
+
+  private parseSegs(buf: ByteTools): Seg[] {
+    const out: Seg[] = [];
+    for (let i = 0; buf.tell() < buf.length; i++) {
+      const startVertex = buf.readInt16();
+      const endVertex = buf.readInt16();
+      const angle = buf.readInt16();
+      const linedef = buf.readInt16();
+      const direction = buf.readInt16();
+      const offset = buf.readInt16();
+      out.push(new Seg(this, i, startVertex, endVertex, angle, linedef, direction, offset));
+    }
+    return out;
+  }
+
+  private parseSubsectors(buf: ByteTools): Subsector[] {
+    const out: Subsector[] = [];
+    for (let i = 0; buf.tell() < buf.length; i++) {
+      const segCount = buf.readInt16();
+      const firstSeg = buf.readInt16();
+      out.push(new Subsector(this, i, segCount, firstSeg));
     }
     return out;
   }

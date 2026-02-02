@@ -7,6 +7,8 @@
 
 export { Linedef } from './linedef';
 export { Sector } from './sector';
+export { Seg } from './seg';
+export { Subsector } from './subsector';
 export { Thing } from './thing';
 export { Sidedef } from './sidedef';
 export { Vertex } from './vertex';

@@ -101,6 +101,8 @@ export class WadParser {
     const [SIDEDEFS] = WadParser.getLumpsByName(slice, 'SIDEDEFS');
     const [VERTEXES] = WadParser.getLumpsByName(slice, 'VERTEXES');
     const [SECTORS] = WadParser.getLumpsByName(slice, 'SECTORS');
+    const [SEGS] = WadParser.getLumpsByName(slice, 'SEGS');
+    const [SSECTORS] = WadParser.getLumpsByName(slice, 'SSECTORS');
 
     return {
       THINGS,
@@ -108,6 +110,8 @@ export class WadParser {
       SIDEDEFS,
       VERTEXES,
       SECTORS,
+      SEGS,
+      SSECTORS,
     };
   }
 }

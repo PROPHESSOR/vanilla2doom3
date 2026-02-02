@@ -48,7 +48,7 @@ export class MapParser {
       this.segs = this.parseSegs(SEGS.read());
       this.subsectors = this.parseSubsectors(SSECTORS.read());
     } else {
-      throw new Error('Currently we rely on SEGS and SSECTORS to be present');
+      throw new Error('SEGS and SSECTORS lumps are required');
     }
   }
 

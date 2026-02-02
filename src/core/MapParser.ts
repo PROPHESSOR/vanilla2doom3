@@ -15,6 +15,17 @@ import { Subsector } from './structures/subsector';
 
 const DOOM_LINEDEF_FLAGS = ['blocking', 'blockmonsters', 'twosided', 'dontpegtop', 'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped'] as const;
 const DOOM_THING_FLAGS = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'ambush', 'single', 'dm', 'coop'] as const;
+
+export interface StoredMap {
+  vertexes: { _id: number; x: string; y: string }[];
+  linedefs: { _id: number; v1: number; v2: number; sidefront: number; sideback: number; special: number; arg0: number; arg1: number; arg2: number; arg3: number; arg4: number; flags: Record<string, boolean> }[];
+  sidedefs: { _id: number; offsetx: number; offsety: number; uppertex: string; lowertex: string; middletex: string; sector: number }[];
+  sectors: { _id: number; heightfloor: number; heightceiling: number; texturefloor: string; textureceiling: string; lightlevel: number; special: number; id: number }[];
+  things: { _id: number; x: number; y: number; angle: number; type: number; flags: Record<string, boolean> }[];
+  segs: { _id: number; startVertex: number; endVertex: number; angle: number; linedef: number; side: number; offset: number }[];
+  subsectors: { _id: number; segCount: number; firstSeg: number }[];
+}
+
 export class MapParser {
   vertexes: Vertex[] | null = null;
   linedefs: Linedef[] | null = null;
@@ -25,6 +36,55 @@ export class MapParser {
   subsectors: Subsector[] | null = null;
 
   constructor(public wad: WadParser) { }
+
+  toStoredMap(): StoredMap {
+    const v = this.vertexes ?? [];
+    const ld = this.linedefs ?? [];
+    const sd = this.sidedefs ?? [];
+    const sec = this.sectors ?? [];
+    const th = this.things ?? [];
+    const seg = this.segs ?? [];
+    const ss = this.subsectors ?? [];
+    const linedefFlags = (l: Linedef): Record<string, boolean> => {
+      const flags: Record<string, boolean> = {};
+      const obj = l as unknown as Record<string, unknown>;
+      for (const key of Object.keys(obj)) {
+        if (key === 'map' || key.startsWith('_') || ['v1', 'v2', 'sidefront', 'sideback', 'special', 'arg0', 'arg1', 'arg2', 'arg3', 'arg4'].includes(key)) continue;
+        const val = obj[key];
+        if (typeof val === 'boolean') flags[key] = val;
+      }
+      return flags;
+    };
+    const thingFlags = (t: Thing): Record<string, boolean> => {
+      const flags: Record<string, boolean> = {};
+      const obj = t as unknown as Record<string, unknown>;
+      for (const key of Object.keys(obj)) {
+        if (key === 'map' || key.startsWith('_') || ['x', 'y', 'angle', 'type'].includes(key)) continue;
+        const val = obj[key];
+        if (typeof val === 'boolean') flags[key] = val;
+      }
+      return flags;
+    };
+    return {
+      vertexes: v.map((x) => ({ _id: x._id, x: x.x, y: x.y })),
+      linedefs: ld.map((l) => ({ _id: l._id, v1: l.v1, v2: l.v2, sidefront: l.sidefront, sideback: l.sideback, special: l.special, arg0: l.arg0, arg1: l.arg1, arg2: l.arg2, arg3: l.arg3, arg4: l.arg4, flags: linedefFlags(l) })),
+      sidedefs: sd.map((s) => ({ _id: s._id, offsetx: s.offsetx, offsety: s.offsety, uppertex: s.texturetop.replace(/^"|"$/g, ''), lowertex: s.texturebottom.replace(/^"|"$/g, ''), middletex: s.texturemiddle.replace(/^"|"$/g, ''), sector: s.sector })),
+      sectors: sec.map((s) => ({ _id: s._id, heightfloor: s.heightfloor, heightceiling: s.heightceiling, texturefloor: s.texturefloor, textureceiling: s.textureceiling, lightlevel: s.lightlevel, special: s.special, id: s.id })),
+      things: th.map((t) => ({ _id: t._id, x: t.x, y: t.y, angle: t.angle, type: t.type, flags: thingFlags(t) })),
+      segs: seg.map((s) => ({ _id: s._id, startVertex: s.startVertex, endVertex: s.endVertex, angle: s.angle, linedef: s.linedef, side: s.side, offset: s.offset })),
+      subsectors: ss.map((s) => ({ _id: s._id, segCount: s.segCount, firstSeg: s.firstSeg })),
+    };
+  }
+
+  loadFromSnapshot(stored: StoredMap): void {
+    this.vertexes = stored.vertexes.map((v) => new Vertex(this, v._id, parseFloat(v.x), parseFloat(v.y)));
+    this.sidedefs = stored.sidedefs.map((s) => new Sidedef(this, s._id, s.offsetx, s.offsety, s.uppertex, s.lowertex, s.middletex, s.sector));
+    this.sectors = stored.sectors.map((s) => new Sector(this, s._id, s.heightfloor, s.heightceiling, s.texturefloor, s.textureceiling, s.lightlevel, s.special, s.id));
+    this.linedefs = stored.linedefs.map((l) => new Linedef(this, l._id, l.v1, l.v2, l.flags, l.special, { arg1: l.arg0, arg2: l.arg1, arg3: l.arg2, arg4: l.arg3, arg5: l.arg4 }, l.sidefront, l.sideback));
+    this.things = stored.things.map((t) => new Thing(this, t._id, t.x, t.y, t.angle, t.type, t.flags));
+    this.segs = stored.segs.map((s) => new Seg(this, s._id, s.startVertex, s.endVertex, s.angle, s.linedef, s.side, s.offset));
+    this.subsectors = stored.subsectors.map((s) => new Subsector(this, s._id, s.segCount, s.firstSeg));
+  }
 
   parse(mapIndex: number): void {
     const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS, SEGS, SSECTORS } = this.wad.getMapLumps(mapIndex);

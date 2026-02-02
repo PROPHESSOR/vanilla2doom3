@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, toRaw } from 'vue';
 import { WadParser } from './core/WadParser';
-import { MapParser } from './core/MapParser';
+import { MapParser, type StoredMap } from './core/MapParser';
 import { readByteToolsBufferFromInput } from './core/utils/BrowserFile';
+
+const LAST_MAP_KEY = 'vanilla2doom3-last-map';
 
 interface MapChoice {
   name: string;
@@ -49,10 +51,39 @@ function selectMap(choice: MapChoice) {
     const parser = new MapParser(toRaw(wad) as WadParser);
     parser.parse(choice.index);
     mapParser.value = parser;
+    try {
+      localStorage.setItem(LAST_MAP_KEY, JSON.stringify(parser.toStoredMap()));
+    } catch {
+      /* ignore */
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to parse map';
   }
 }
+
+function loadLastMap() {
+  error.value = null;
+  try {
+    const raw = localStorage.getItem(LAST_MAP_KEY);
+    if (!raw) return;
+    const stored: StoredMap = JSON.parse(raw);
+    const parser = new MapParser({} as WadParser);
+    parser.loadFromSnapshot(stored);
+    mapParser.value = parser;
+    wadParser.value = null;
+    maps.value = [];
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load last map';
+  }
+}
+
+const hasLastMap = (() => {
+  try {
+    return localStorage.getItem(LAST_MAP_KEY) != null;
+  } catch {
+    return false;
+  }
+})();
 
 const mapBounds = computed(() => {
   const mp = mapParser.value;
@@ -193,11 +224,16 @@ const VERTEX_CIRCLE_R = 5;
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- Step 1: Select WAD -->
-    <section v-if="!wadParser" class="step">
+    <section v-if="!wadParser && !mapParser" class="step">
       <label class="file-label">
         <span>Select WAD file</span>
         <input type="file" accept=".wad" :disabled="loading" @change="onWadSelected" />
       </label>
+      <p v-if="hasLastMap" class="load-last">
+        <button type="button" class="btn-secondary" :disabled="loading" @click="loadLastMap">
+          Load last map
+        </button>
+      </p>
       <p v-if="loading" class="muted">Parsing WAD…</p>
     </section>
 
@@ -329,6 +365,29 @@ h2 {
 
 .map-list button:hover {
   background: #444;
+}
+
+.load-last {
+  margin-top: 0.75rem;
+}
+
+.btn-secondary {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: #8bc34a;
+  border: 1px solid #8bc34a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(139, 195, 74, 0.15);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .map-view {

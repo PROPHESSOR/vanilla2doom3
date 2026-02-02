@@ -19,6 +19,9 @@ const loading = ref(false);
 const hoveredSubsectorIndex = ref<number | null>(null);
 const tooltipPos = ref({ x: 0, y: 0 });
 
+(window as any).mapParser = mapParser;
+(window as any).wadParser = wadParser;
+
 async function onWadSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   if (!input?.files?.length) return;

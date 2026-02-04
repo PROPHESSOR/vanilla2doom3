@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, toRaw } from 'vue';
-import { WadParser } from './core/WadParser';
-import { MapParser, type StoredMap } from './core/MapParser';
-import { readByteToolsBufferFromInput } from './core/utils/BrowserFile';
+import { WadParser } from './idTech1/WadParser';
+import { MapParser, type StoredMap } from './idTech1/MapParser';
+import { readByteToolsBufferFromInput } from './idTech1/utils/BrowserFile';
+import { generateDoom3Map } from './idTech4';
 
 const LAST_MAP_KEY = 'vanilla2doom3-last-map';
 
@@ -208,6 +209,32 @@ function setHover(i: number | null) {
   hoveredSubsectorIndex.value = i;
 }
 
+function exportDoom3Map() {
+  const mp = mapParser.value;
+  if (!mp) return;
+
+  try {
+    console.log('Generating Doom 3 .map file...');
+    const mapContent = generateDoom3Map(toRaw(mp) as MapParser);
+
+    // Create download
+    const blob = new Blob([mapContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'converted.map';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('Doom 3 .map file exported successfully');
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to generate .map file';
+    console.error('Export failed:', e);
+  }
+}
+
 const VERTEX_CIRCLE_R = 5;
 </script>
 
@@ -244,6 +271,11 @@ const VERTEX_CIRCLE_R = 5;
 
     <!-- Step 3: Map view (linedefs) -->
     <section v-if="mapParser" class="step">
+      <div class="actions">
+        <button type="button" class="btn-export" @click="exportDoom3Map">
+          Export Doom 3 .map
+        </button>
+      </div>
       <div class="map-view" @mousemove="onMapViewMouseMove">
         <div v-if="hoveredSubsector" class="tooltip"
           :style="{ left: tooltipPos.x + 12 + 'px', top: tooltipPos.y + 12 + 'px' }">
@@ -383,6 +415,29 @@ h2 {
 .btn-secondary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.actions {
+  margin-bottom: 1rem;
+}
+
+.btn-export {
+  padding: 0.6rem 1.2rem;
+  background: #2196f3;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.btn-export:hover {
+  background: #1976d2;
+}
+
+.btn-export:active {
+  background: #0d47a1;
 }
 
 .map-view {

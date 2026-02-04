@@ -91,18 +91,27 @@ export class WadParser {
     return this.lumps.filter((x) => REGEXP_MAP.test(x.name));
   }
 
+  /** GL level marker names (exclude data lumps so we find the marker). */
+  private static readonly GL_DATA_LUMPS = new Set(['GL_VERT', 'GL_SEGS', 'GL_SSECT', 'GL_NODES', 'GL_PVS']);
+
   getMapLumps(index: number) {
     if (!this.lumps) throw new Error(NOT_PARSED_ERROR);
 
     const slice = this.lumps.slice(index);
+    const mapName = this.lumps[index]?.name ?? '';
 
     const [THINGS] = WadParser.getLumpsByName(slice, 'THINGS');
     const [LINEDEFS] = WadParser.getLumpsByName(slice, 'LINEDEFS');
     const [SIDEDEFS] = WadParser.getLumpsByName(slice, 'SIDEDEFS');
     const [VERTEXES] = WadParser.getLumpsByName(slice, 'VERTEXES');
     const [SECTORS] = WadParser.getLumpsByName(slice, 'SECTORS');
-    const [SEGS] = WadParser.getLumpsByName(slice, 'SEGS');
-    const [SSECTORS] = WadParser.getLumpsByName(slice, 'SSECTORS');
+
+    const glMarkerIndex = slice.findIndex(
+      (l) => l.name.startsWith('GL_') && !WadParser.GL_DATA_LUMPS.has(l.name)
+    );
+    const GL_VERT = glMarkerIndex >= 0 && glMarkerIndex + 1 < slice.length && slice[glMarkerIndex + 1]!.name === 'GL_VERT' ? slice[glMarkerIndex + 1] : undefined;
+    const GL_SEGS = glMarkerIndex >= 0 && glMarkerIndex + 2 < slice.length && slice[glMarkerIndex + 2]!.name === 'GL_SEGS' ? slice[glMarkerIndex + 2] : undefined;
+    const GL_SSECT = glMarkerIndex >= 0 && glMarkerIndex + 3 < slice.length && slice[glMarkerIndex + 3]!.name === 'GL_SSECT' ? slice[glMarkerIndex + 3] : undefined;
 
     return {
       THINGS,
@@ -110,8 +119,9 @@ export class WadParser {
       SIDEDEFS,
       VERTEXES,
       SECTORS,
-      SEGS,
-      SSECTORS,
+      GL_VERT,
+      GL_SEGS,
+      GL_SSECT,
     };
   }
 }

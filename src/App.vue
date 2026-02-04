@@ -77,6 +77,11 @@ function loadLastMap() {
     maps.value = [];
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load last map';
+    try {
+      localStorage.removeItem(LAST_MAP_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -134,51 +139,10 @@ const sectorColors = computed(() => {
   return colors;
 });
 
-interface SegLike {
-  vertex1?: { x: string; y: string };
-  vertex2?: { x: string; y: string };
-}
-
-function subsectorPolygonPoints(segs: SegLike[]): string {
-  if (!segs.length) return '';
-  let points: string[] = [];
-  const v1 = segs[0]?.vertex1;
-  if (v1) points.push(`${parseFloat(v1.x)},${svgY(parseFloat(v1.y))}`);
-  const v2 = segs[0]?.vertex2;
-  if (v2) points.push(`${parseFloat(v2.x)},${svgY(parseFloat(v2.y))}`);
-  for (const seg of segs) {
-    const v1 = seg.vertex1;
-    if (v1) points.push(`${parseFloat(v1.x)},${svgY(parseFloat(v1.y))}`);
-    const v2 = seg.vertex2;
-    if (v2) points.push(`${parseFloat(v2.x)},${svgY(parseFloat(v2.y))}`);
-  }
-
-  points = Array.from(new Set(points));
-
-  // Sort points counter-clockwise around the centroid
-  if (points.length > 2) {
-    // Compute centroid
-    let sumX = 0;
-    let sumY = 0;
-    points.forEach(pt => {
-      const [x, y] = pt.split(',').map(Number);
-      sumX += x!;
-      sumY += y ?? 0;
-    });
-    const centerX = sumX / points.length;
-    const centerY = sumY / points.length;
-    points.sort((a, b) => {
-      const [x1, y1] = a.split(',').map(Number);
-      const [x2, y2] = b.split(',').map(Number);
-      const angleA = Math.atan2(y1! - centerY, x1! - centerX);
-      const angleB = Math.atan2(y2! - centerY, x2! - centerX);
-      return angleA - angleB;
-    });
-  }
-
-  points.push(points[0]!);
-
-  return points.join(' ');
+function subsectorPolygonPoints(ss: { getPolygonPoints: () => { x: number; y: number }[] }): string {
+  const pts = ss.getPolygonPoints();
+  if (!pts.length) return '';
+  return pts.map((p) => `${p.x},${svgY(p.y)}`).join(' ');
 }
 
 function subsectorStrokeColor(sectorIndex: number | undefined): string {
@@ -197,14 +161,7 @@ const hoveredSubsector = computed(() => {
 const hoveredSubsectorVertices = computed(() => {
   const ss = hoveredSubsector.value;
   if (!ss) return [];
-  const byId = new Map<number, { _id: number; x: string; y: string }>();
-  for (const seg of ss.segs) {
-    const v1 = seg.vertex1;
-    const v2 = seg.vertex2;
-    if (v1) byId.set(v1._id, { _id: v1._id, x: v1.x, y: v1.y });
-    if (v2) byId.set(v2._id, { _id: v2._id, x: v2.x, y: v2.y });
-  }
-  return Array.from(byId.values()).sort((a, b) => a._id - b._id);
+  return ss.getPolygonPoints().map((p, i) => ({ _id: i, x: String(p.x), y: String(p.y) }));
 });
 
 const hoveredVertexColors = computed(() => {
@@ -229,12 +186,16 @@ interface LineWithVertices {
 const hoveredSubsectorLines = computed<LineWithVertices[]>(() => {
   const ss = hoveredSubsector.value;
   if (!ss) return [];
-  return ss.segs
-    .map((seg) => {
+  const segs = ss.segs;
+  return segs
+    .map((seg, j) => {
       const v1 = seg.vertex1;
       const v2 = seg.vertex2;
       if (!v1 || !v2) return null;
-      return { v1: { _id: v1._id, x: v1.x, y: v1.y }, v2: { _id: v2._id, x: v2.x, y: v2.y } };
+      return {
+        v1: { _id: j, x: v1.x, y: v1.y },
+        v2: { _id: (j + 1) % segs.length, x: v2.x, y: v2.y },
+      };
     })
     .filter((x): x is LineWithVertices => x != null);
 });
@@ -299,7 +260,8 @@ const VERTEX_CIRCLE_R = 5;
             </ul>
           </div>
         </div>
-        <svg v-if="mapBounds" :viewBox="svgViewBox" preserveAspectRatio="xMidYMid meet" class="map-svg">
+        <svg v-if="mapBounds" :viewBox="svgViewBox" preserveAspectRatio="xMidYMid meet" class="map-svg"
+          shape-rendering="crispEdges">
           <g class="linedefs-layer">
             <line v-for="(ld, i) in mapParser.linedefs" :key="'ld-' + i" :x1="ld.vertex1 ? parseFloat(ld.vertex1.x) : 0"
               :y1="ld.vertex1 ? svgY(parseFloat(ld.vertex1.y)) : 0" :x2="ld.vertex2 ? parseFloat(ld.vertex2.x) : 0"
@@ -307,10 +269,10 @@ const VERTEX_CIRCLE_R = 5;
           </g>
           <g class="subsectors-layer">
             <polygon v-for="(ss, i) in (mapParser.subsectors ?? [])" :key="'ss-' + i"
-              :points="subsectorPolygonPoints(ss.segs)" :fill="sectorColors.get(ss.sectorIndex ?? -1) ?? '#444'"
+              :points="subsectorPolygonPoints(ss)" :fill="sectorColors.get(ss.sectorIndex ?? -1) ?? '#444'"
               :stroke="subsectorStrokeColor(ss.sectorIndex)"
               :class="['subsector', { 'subsector--hover': hoveredSubsectorIndex === i }]" @mouseenter="setHover(i)"
-              @mouseleave="setHover(null)" :title="subsectorPolygonPoints(ss.segs)" />
+              @mouseleave="setHover(null)" :title="subsectorPolygonPoints(ss)" />
           </g>
           <g v-if="hoveredSubsector" class="vertices-layer">
             <circle v-for="v in hoveredSubsectorVertices" :key="'v-' + v._id" :cx="parseFloat(v.x)"

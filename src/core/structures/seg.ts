@@ -37,15 +37,23 @@ export class Seg {
     this.offset = offset;
   }
 
-  get vertex1(): Vertex | undefined {
+  get vertex1(): Vertex | { x: string; y: string } | undefined {
+    if (this.map.useGlNodes) {
+      const p = this.map.getVertexForSeg(this.startVertex);
+      return { x: String(p.x), y: String(p.y) };
+    }
     return this.map.vertexes?.[this.startVertex];
   }
 
-  get vertex2(): Vertex | undefined {
+  get vertex2(): Vertex | { x: string; y: string } | undefined {
+    if (this.map.useGlNodes) {
+      const p = this.map.getVertexForSeg(this.endVertex);
+      return { x: String(p.x), y: String(p.y) };
+    }
     return this.map.vertexes?.[this.endVertex];
   }
 
   get linedefRef(): Linedef | undefined {
-    return this.map.linedefs?.[this.linedef];
+    return this.linedef >= 0 ? this.map.linedefs?.[this.linedef] : undefined;
   }
 }

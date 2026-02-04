@@ -35,13 +35,24 @@ export class Subsector {
   }
 
   get sectorIndex(): number | undefined {
+    for (const seg of this.segs) {
+      const ld = seg.linedefRef;
+      if (!ld) continue;
+      const sidedefIndex = seg.side === 0 ? ld.sidefront : ld.sideback;
+      const side = this.map.sidedefs?.[sidedefIndex];
+      if (side != null) return side.sector;
+    }
+    return undefined;
+  }
+
+  /** Ordered polygon points (GL: seg order; vanilla: use subsectorPolygonPoints in UI). */
+  getPolygonPoints(): { x: number; y: number }[] {
+    if (!this.map.useGlNodes) return [];
     const list = this.segs;
-    const seg = list[0];
-    if (!seg) return undefined;
-    const ld = seg.linedefRef;
-    if (!ld) return undefined;
-    const sidedefIndex = seg.side === 0 ? ld.sidefront : ld.sideback;
-    const side = this.map.sidedefs?.[sidedefIndex];
-    return side?.sector;
+    const out: { x: number; y: number }[] = [];
+    for (const seg of list) {
+      out.push(this.map.getVertexForSeg(seg.startVertex));
+    }
+    return out;
   }
 }

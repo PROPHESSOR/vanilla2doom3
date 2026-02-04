@@ -16,6 +16,11 @@ import { Subsector } from './structures/subsector';
 const DOOM_LINEDEF_FLAGS = ['blocking', 'blockmonsters', 'twosided', 'dontpegtop', 'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped'] as const;
 const DOOM_THING_FLAGS = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'ambush', 'single', 'dm', 'coop'] as const;
 
+const GL_VERT_MAGIC_V2 = 0x32644e67; // 'gNd2' LE
+const GL_VERT_MAGIC_V5 = 0x35644e67; // 'gNd5' LE
+const VERT_IS_GL_V1 = 1 << 15;
+const VERT_IS_GL_V5 = 1 << 31;
+
 export interface StoredMap {
   vertexes: { _id: number; x: string; y: string }[];
   linedefs: { _id: number; v1: number; v2: number; sidefront: number; sideback: number; special: number; arg0: number; arg1: number; arg2: number; arg3: number; arg4: number; flags: Record<string, boolean> }[];
@@ -24,6 +29,8 @@ export interface StoredMap {
   things: { _id: number; x: number; y: number; angle: number; type: number; flags: Record<string, boolean> }[];
   segs: { _id: number; startVertex: number; endVertex: number; angle: number; linedef: number; side: number; offset: number }[];
   subsectors: { _id: number; segCount: number; firstSeg: number }[];
+  useGlNodes?: boolean;
+  glVertexes?: { x: number; y: number }[];
 }
 
 export class MapParser {
@@ -34,8 +41,21 @@ export class MapParser {
   things: Thing[] | null = null;
   segs: Seg[] | null = null;
   subsectors: Subsector[] | null = null;
+  useGlNodes = false;
+  glVertexes: { x: number; y: number }[] = [];
 
   constructor(public wad: WadParser) { }
+
+  /** Resolve vertex index to coordinates (map vertex or GL vertex). */
+  getVertexForSeg(unifiedIndex: number): { x: number; y: number } {
+    const v = this.vertexes ?? [];
+    if (this.useGlNodes && unifiedIndex >= v.length) {
+      const gl = this.glVertexes[unifiedIndex - v.length];
+      return gl ?? { x: 0, y: 0 };
+    }
+    const vert = v[unifiedIndex];
+    return vert ? { x: parseFloat(vert.x), y: parseFloat(vert.y) } : { x: 0, y: 0 };
+  }
 
   toStoredMap(): StoredMap {
     const v = this.vertexes ?? [];
@@ -73,10 +93,14 @@ export class MapParser {
       things: th.map((t) => ({ _id: t._id, x: t.x, y: t.y, angle: t.angle, type: t.type, flags: thingFlags(t) })),
       segs: seg.map((s) => ({ _id: s._id, startVertex: s.startVertex, endVertex: s.endVertex, angle: s.angle, linedef: s.linedef, side: s.side, offset: s.offset })),
       subsectors: ss.map((s) => ({ _id: s._id, segCount: s.segCount, firstSeg: s.firstSeg })),
+      ...(this.useGlNodes && { useGlNodes: true, glVertexes: this.glVertexes }),
     };
   }
 
   loadFromSnapshot(stored: StoredMap): void {
+    if (!stored.useGlNodes || !stored.glVertexes?.length) {
+      throw new Error('Saved map is from an older version (no GL nodes in snapshot). Select your WAD file and choose the map again.');
+    }
     this.vertexes = stored.vertexes.map((v) => new Vertex(this, v._id, parseFloat(v.x), parseFloat(v.y)));
     this.sidedefs = stored.sidedefs.map((s) => new Sidedef(this, s._id, s.offsetx, s.offsety, s.uppertex, s.lowertex, s.middletex, s.sector));
     this.sectors = stored.sectors.map((s) => new Sector(this, s._id, s.heightfloor, s.heightceiling, s.texturefloor, s.textureceiling, s.lightlevel, s.special, s.id));
@@ -84,12 +108,18 @@ export class MapParser {
     this.things = stored.things.map((t) => new Thing(this, t._id, t.x, t.y, t.angle, t.type, t.flags));
     this.segs = stored.segs.map((s) => new Seg(this, s._id, s.startVertex, s.endVertex, s.angle, s.linedef, s.side, s.offset));
     this.subsectors = stored.subsectors.map((s) => new Subsector(this, s._id, s.segCount, s.firstSeg));
+    this.useGlNodes = true;
+    this.glVertexes = stored.glVertexes;
   }
 
   parse(mapIndex: number): void {
-    const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS, SEGS, SSECTORS } = this.wad.getMapLumps(mapIndex);
+    const lumps = this.wad.getMapLumps(mapIndex);
+    const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS, GL_VERT, GL_SEGS, GL_SSECT } = lumps;
     if (!(THINGS && LINEDEFS && SIDEDEFS && VERTEXES && SECTORS)) {
       throw new Error('Failed to get map lumps');
+    }
+    if (!(GL_VERT && GL_SEGS && GL_SSECT)) {
+      throw new Error('GL nodes required: GL_VERT, GL_SEGS and GL_SSECT lumps not found. Run a GL node builder (e.g. glBSP) on the WAD.');
     }
 
     const vBuf = VERTEXES.read();
@@ -104,12 +134,12 @@ export class MapParser {
     this.linedefs = this.parseLinedefs(ldBuf);
     this.things = this.parseThings(thBuf);
 
-    if (SEGS && SSECTORS) {
-      this.segs = this.parseSegs(SEGS.read());
-      this.subsectors = this.parseSubsectors(SSECTORS.read());
-    } else {
-      throw new Error('SEGS and SSECTORS lumps are required');
-    }
+    this.useGlNodes = true;
+    const { vertices, version } = this.parseGlVertexes(GL_VERT.read());
+    this.glVertexes = vertices;
+    const { segs: glSegs, subsectors: glSubsectors } = this.parseGlSegsAndSubsectors(GL_SEGS.read(), GL_SSECT.read(), version);
+    this.segs = glSegs;
+    this.subsectors = glSubsectors;
   }
 
   private parseVertexes(buf: ByteTools): Vertex[] {
@@ -216,28 +246,65 @@ export class MapParser {
     return out;
   }
 
-  private parseSegs(buf: ByteTools): Seg[] {
-    const out: Seg[] = [];
-    for (let i = 0; buf.tell() < buf.length; i++) {
-      const startVertex = buf.readInt16();
-      const endVertex = buf.readInt16();
-      const angle = buf.readInt16();
-      const linedef = buf.readInt16();
-      const direction = buf.readInt16();
-      const offset = buf.readInt16();
-      out.push(new Seg(this, i, startVertex, endVertex, angle, linedef, direction, offset));
+  private parseGlVertexes(buf: ByteTools): { vertices: { x: number; y: number }[]; version: 2 | 5 } {
+    if (buf.length < 4) return { vertices: [], version: 2 };
+    const magic = buf.readUInt32();
+    const version: 2 | 5 = magic === GL_VERT_MAGIC_V5 ? 5 : 2;
+    if (magic !== GL_VERT_MAGIC_V2 && magic !== GL_VERT_MAGIC_V5) return { vertices: [], version: 2 };
+    const out: { x: number; y: number }[] = [];
+    while (buf.tell() + 8 <= buf.length) {
+      out.push({ x: buf.readInt32() / 65536, y: buf.readInt32() / 65536 });
     }
-    return out;
+    return { vertices: out, version };
   }
 
-  private parseSubsectors(buf: ByteTools): Subsector[] {
-    const out: Subsector[] = [];
-    for (let i = 0; buf.tell() < buf.length; i++) {
-      const segCount = buf.readInt16();
-      const firstSeg = buf.readInt16();
-      out.push(new Subsector(this, i, segCount, firstSeg));
+  private parseGlSegsAndSubsectors(
+    glSegBuf: ByteTools,
+    glSsectBuf: ByteTools,
+    glVersion: 2 | 5
+  ): { segs: Seg[]; subsectors: Subsector[] } {
+    const numMapV = this.vertexes?.length ?? 0;
+    const toUnified = (raw: number, isGl: boolean): number =>
+      isGl ? numMapV + (raw & (glVersion === 5 ? 0x7fffffff : 0x7fff)) : (raw & (glVersion === 5 ? 0x7fffffff : 0x7fff));
+    const vertIsGl = glVersion === 5 ? VERT_IS_GL_V5 : VERT_IS_GL_V1;
+
+    const segs: Seg[] = [];
+    if (glVersion === 5) {
+      while (glSegBuf.tell() + 18 <= glSegBuf.length) {
+        const startRaw = glSegBuf.readUInt32();
+        const endRaw = glSegBuf.readUInt32();
+        const linedef = glSegBuf.readUInt16();
+        const side = glSegBuf.readUInt16();
+        glSegBuf.readUInt32();
+        const start = toUnified(startRaw, (startRaw & vertIsGl) !== 0);
+        const end = toUnified(endRaw, (endRaw & vertIsGl) !== 0);
+        segs.push(new Seg(this, segs.length, start, end, 0, linedef === 0xffff ? -1 : linedef, side, 0));
+      }
+    } else {
+      while (glSegBuf.tell() + 12 <= glSegBuf.length) {
+        const startRaw = glSegBuf.readUInt16();
+        const endRaw = glSegBuf.readUInt16();
+        const linedef = glSegBuf.readUInt16();
+        const side = glSegBuf.readUInt16();
+        glSegBuf.readUInt16();
+        const start = toUnified(startRaw, (startRaw & vertIsGl) !== 0);
+        const end = toUnified(endRaw, (endRaw & vertIsGl) !== 0);
+        segs.push(new Seg(this, segs.length, start, end, 0, linedef === 0xffff ? -1 : linedef, side, 0));
+      }
     }
-    return out;
+
+    glSsectBuf.seek(0, 'START');
+    const subsectors: Subsector[] = [];
+    if (glVersion === 5) {
+      for (let i = 0; glSsectBuf.tell() + 8 <= glSsectBuf.length; i++) {
+        subsectors.push(new Subsector(this, i, glSsectBuf.readUInt32(), glSsectBuf.readUInt32()));
+      }
+    } else {
+      for (let i = 0; glSsectBuf.tell() + 4 <= glSsectBuf.length; i++) {
+        subsectors.push(new Subsector(this, i, glSsectBuf.readUInt16(), glSsectBuf.readUInt16()));
+      }
+    }
+    return { segs, subsectors };
   }
 }
 

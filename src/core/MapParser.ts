@@ -12,6 +12,7 @@ import { Sector } from './structures/sector';
 import { Thing } from './structures/thing';
 import { Seg } from './structures/seg';
 import { Subsector } from './structures/subsector';
+import { buildSubsectors } from './nodebuilder';
 
 const DOOM_LINEDEF_FLAGS = ['blocking', 'blockmonsters', 'twosided', 'dontpegtop', 'dontpegbottom', 'secret', 'blocksound', 'dontdraw', 'mapped'] as const;
 const DOOM_THING_FLAGS = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'ambush', 'single', 'dm', 'coop'] as const;
@@ -98,8 +99,8 @@ export class MapParser {
   }
 
   loadFromSnapshot(stored: StoredMap): void {
-    if (!stored.useGlNodes || !stored.glVertexes?.length) {
-      throw new Error('Saved map is from an older version (no GL nodes in snapshot). Select your WAD file and choose the map again.');
+    if (!stored.useGlNodes || !stored.glVertexes) {
+      throw new Error('Saved map is from an older version (no subsector data in snapshot). Select your WAD file and choose the map again.');
     }
     this.vertexes = stored.vertexes.map((v) => new Vertex(this, v._id, parseFloat(v.x), parseFloat(v.y)));
     this.sidedefs = stored.sidedefs.map((s) => new Sidedef(this, s._id, s.offsetx, s.offsety, s.uppertex, s.lowertex, s.middletex, s.sector));
@@ -114,12 +115,9 @@ export class MapParser {
 
   parse(mapIndex: number): void {
     const lumps = this.wad.getMapLumps(mapIndex);
-    const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS, GL_VERT, GL_SEGS, GL_SSECT } = lumps;
+    const { THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SECTORS } = lumps;
     if (!(THINGS && LINEDEFS && SIDEDEFS && VERTEXES && SECTORS)) {
       throw new Error('Failed to get map lumps');
-    }
-    if (!(GL_VERT && GL_SEGS && GL_SSECT)) {
-      throw new Error('GL nodes required: GL_VERT, GL_SEGS and GL_SSECT lumps not found. Run a GL node builder (e.g. glBSP) on the WAD.');
     }
 
     const vBuf = VERTEXES.read();
@@ -134,12 +132,55 @@ export class MapParser {
     this.linedefs = this.parseLinedefs(ldBuf);
     this.things = this.parseThings(thBuf);
 
+    // Always build subsectors from geometry using our node builder
+    console.log('Building subsectors from geometry...');
+    this.buildSubsectorsFromGeometry();
+  }
+
+  buildSubsectorsFromGeometry(): void {
+    if (!this.vertexes || !this.linedefs || !this.sidedefs || !this.sectors) {
+      throw new Error('Map geometry not loaded');
+    }
+
+    // Convert to node builder input format
+    const input = {
+      vertices: this.vertexes.map((v) => ({
+        x: parseFloat(v.x),
+        y: parseFloat(v.y),
+      })),
+      linedefs: this.linedefs.map((ld) => ({
+        v1: ld.v1,
+        v2: ld.v2,
+        sidefront: ld.sidefront,
+        sideback: ld.sideback,
+        two_sided: (ld as any).twosided ?? false,
+        special: ld.special,
+      })),
+      sidedefs: this.sidedefs.map((sd) => ({
+        sector: sd.sector,
+      })),
+      sectors: this.sectors.map((s, i) => ({
+        index: i,
+      })),
+    };
+
+    // Build subsectors
+    const output = buildSubsectors(input);
+
+    // Convert to MapParser format
+    this.glVertexes = output.newVertices;
+    this.segs = output.segs.map(
+      (s, i) =>
+        new Seg(this, i, s.startVertex, s.endVertex, s.angle, s.linedef, s.side, s.offset)
+    );
+    this.subsectors = output.subsectors.map(
+      (ss, i) => new Subsector(this, i, ss.segCount, ss.firstSeg)
+    );
     this.useGlNodes = true;
-    const { vertices, version } = this.parseGlVertexes(GL_VERT.read());
-    this.glVertexes = vertices;
-    const { segs: glSegs, subsectors: glSubsectors } = this.parseGlSegsAndSubsectors(GL_SEGS.read(), GL_SSECT.read(), version);
-    this.segs = glSegs;
-    this.subsectors = glSubsectors;
+
+    console.log(
+      `Built ${this.subsectors.length} subsectors, ${this.segs.length} segs, ${this.glVertexes.length} new vertices`
+    );
   }
 
   private parseVertexes(buf: ByteTools): Vertex[] {

@@ -165,7 +165,7 @@ export class MapParser {
     };
 
     // Build subsectors
-    const output = buildSubsectors(input);
+    const output = buildSubsectors(input, { debug: true });
 
     // Convert to MapParser format
     this.glVertexes = output.newVertices;

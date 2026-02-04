@@ -249,8 +249,8 @@ export function addIntersection(
 export function divideOneSeg(
   seg: Seg,
   part: Seg,
-  left_list: QuadTree,
-  right_list: QuadTree,
+  left_list_ref: { list: Seg | null },
+  right_list_ref: { list: Seg | null },
   cut_list_ref: { list: Intersection | null },
   num_new_vert_ref: { count: number }
 ): void {
@@ -271,9 +271,9 @@ export function divideOneSeg(
 
     // This seg runs along the same line as the partition
     if (seg.pdx * part.pdx + seg.pdy * part.pdy < 0) {
-      left_list.addSeg(seg);
+      left_list_ref.list = listAddSeg(left_list_ref.list, seg);
     } else {
-      right_list.addSeg(seg);
+      right_list_ref.list = listAddSeg(right_list_ref.list, seg);
     }
     return;
   }
@@ -286,7 +286,7 @@ export function divideOneSeg(
       cut_list_ref.list = addIntersection(cut_list_ref.list, seg.end, part, self_ref);
     }
 
-    right_list.addSeg(seg);
+    right_list_ref.list = listAddSeg(right_list_ref.list, seg);
     return;
   }
 
@@ -298,7 +298,7 @@ export function divideOneSeg(
       cut_list_ref.list = addIntersection(cut_list_ref.list, seg.end, part, self_ref);
     }
 
-    left_list.addSeg(seg);
+    left_list_ref.list = listAddSeg(left_list_ref.list, seg);
     return;
   }
 
@@ -311,19 +311,19 @@ export function divideOneSeg(
   cut_list_ref.list = addIntersection(cut_list_ref.list, seg.end, part, self_ref);
 
   if (a < 0) {
-    left_list.addSeg(seg);
-    right_list.addSeg(new_seg);
+    left_list_ref.list = listAddSeg(left_list_ref.list, seg);
+    right_list_ref.list = listAddSeg(right_list_ref.list, new_seg);
   } else {
-    right_list.addSeg(seg);
-    left_list.addSeg(new_seg);
+    right_list_ref.list = listAddSeg(right_list_ref.list, seg);
+    left_list_ref.list = listAddSeg(left_list_ref.list, new_seg);
   }
 }
 
 export function separateSegs(
   tree: QuadTree,
   part: Seg,
-  left_list: QuadTree,
-  right_list: QuadTree,
+  left_list_ref: { list: Seg | null },
+  right_list_ref: { list: Seg | null },
   cut_list_ref: { list: Intersection | null },
   num_new_vert_ref: { count: number }
 ): void {
@@ -332,21 +332,21 @@ export function separateSegs(
     tree.list = seg.next;
 
     seg.quad = null;
-    divideOneSeg(seg, part, left_list, right_list, cut_list_ref, num_new_vert_ref);
+    divideOneSeg(seg, part, left_list_ref, right_list_ref, cut_list_ref, num_new_vert_ref);
   }
 
   // Recursively handle sub-blocks
   if (tree.subs[0] !== null && tree.subs[1] !== null) {
-    separateSegs(tree.subs[0], part, left_list, right_list, cut_list_ref, num_new_vert_ref);
-    separateSegs(tree.subs[1], part, left_list, right_list, cut_list_ref, num_new_vert_ref);
+    separateSegs(tree.subs[0], part, left_list_ref, right_list_ref, cut_list_ref, num_new_vert_ref);
+    separateSegs(tree.subs[1], part, left_list_ref, right_list_ref, cut_list_ref, num_new_vert_ref);
   }
 }
 
 export function addMinisegs(
   cut_list: Intersection | null,
   part: Seg,
-  left_list: QuadTree,
-  right_list: QuadTree
+  left_list_ref: { list: Seg | null },
+  right_list_ref: { list: Seg | null }
 ): void {
   // Find open gaps in the intersection list, convert to minisegs
   for (let cut = cut_list; cut && cut.next; cut = cut.next) {
@@ -379,7 +379,7 @@ export function addMinisegs(
     buddy.recompute();
 
     // Add to appropriate lists
-    right_list.addSeg(seg);
-    left_list.addSeg(buddy);
+    right_list_ref.list = listAddSeg(right_list_ref.list, seg);
+    left_list_ref.list = listAddSeg(left_list_ref.list, buddy);
   }
 }

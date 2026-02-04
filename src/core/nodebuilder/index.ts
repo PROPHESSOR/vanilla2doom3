@@ -50,9 +50,10 @@ export interface NodeBuilderOutput {
 
 export function buildSubsectors(
   input: NodeBuilderInput,
-  options: { fast?: boolean } = {}
+  options: { fast?: boolean; debug?: boolean } = {}
 ): NodeBuilderOutput {
   const fast = options.fast ?? true;
+  const debug = options.debug ?? false;
 
   // Convert input to internal types
   const vertices: Vertex[] = input.vertices.map(
@@ -120,6 +121,20 @@ export function buildSubsectors(
 
   // Post-process: clockwise ordering
   clockwiseBspTree(subsectors);
+
+  if (debug) {
+    console.log(`Built ${subsectors.length} subsectors`);
+    for (let i = 0; i < Math.min(5, subsectors.length); i++) {
+      const sub = subsectors[i]!;
+      console.log(`  Subsector ${i}: ${sub.seg_count} segs`);
+      let segNum = 0;
+      for (let seg = sub.seg_list; seg && segNum < 10; seg = seg.next, segNum++) {
+        console.log(
+          `    Seg ${segNum}: (${seg.start.x.toFixed(1)},${seg.start.y.toFixed(1)}) -> (${seg.end.x.toFixed(1)},${seg.end.y.toFixed(1)}) linedef=${seg.linedef?.index ?? 'miniseg'}`
+        );
+      }
+    }
+  }
 
   // Collect new vertices
   const new_vertices: Vertex[] = [];

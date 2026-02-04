@@ -52,14 +52,23 @@ export function buildNodes(
   const node = new Node();
 
   // Divide segs into two lists: left & right
-  const left_tree = new QuadTree(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
-  const right_tree = new QuadTree(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
+  const left_list_ref = { list: null as Seg | null };
+  const right_list_ref = { list: null as Seg | null };
   const cut_list_ref = { list: null as Intersection | null };
 
-  separateSegs(tree, part, left_tree, right_tree, cut_list_ref, num_new_vert_ref);
+  separateSegs(tree, part, left_list_ref, right_list_ref, cut_list_ref, num_new_vert_ref);
+
+  // Sanity checks
+  if (right_list_ref.list === null) {
+    throw new Error('Separated seg-list has empty RIGHT side');
+  }
+
+  if (left_list_ref.list === null) {
+    throw new Error('Separated seg-list has empty LEFT side');
+  }
 
   if (cut_list_ref.list !== null) {
-    addMinisegs(cut_list_ref.list, part, left_tree, right_tree);
+    addMinisegs(cut_list_ref.list, part, left_list_ref, right_list_ref);
   }
 
   // Set partition
@@ -84,9 +93,8 @@ export function buildNodes(
   }
 
   // Recursively build left side
-  const left_list = left_tree.convertToList();
   const left_result = buildNodes(
-    left_list,
+    left_list_ref.list,
     depth + 1,
     node.l_bounds,
     subsectors,
@@ -97,9 +105,8 @@ export function buildNodes(
   node.l_subsec = left_result.subsec;
 
   // Recursively build right side
-  const right_list = right_tree.convertToList();
   const right_result = buildNodes(
-    right_list,
+    right_list_ref.list,
     depth + 1,
     node.r_bounds,
     subsectors,

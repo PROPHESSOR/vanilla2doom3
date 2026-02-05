@@ -86,19 +86,20 @@ async function main() {
   console.log('Compositing wall textures...');
   for (const def of textureDefs) {
     const image = compositeTexture(def, pnames, patchCache);
+    const alpha = hasTransparency(image);
+    if (alpha) transparentNames.add(def.name);
     const tgaPath = join(textureDir, `${def.name}.tga`);
-    await writeTga(tgaPath, image, palette);
+    await writeTga(tgaPath, image, palette, alpha);
     allNames.push(def.name);
-    if (hasTransparency(image)) transparentNames.add(def.name);
   }
   console.log(`Wrote ${textureDefs.length} wall textures (${transparentNames.size} with alpha)`);
 
-  // 7. Extract flats → TGA (always fully opaque)
+  // 7. Extract flats → TGA (always fully opaque, no alpha)
   console.log('Extracting flats...');
   const flats = extractFlats(wad);
   for (const flat of flats) {
     const tgaPath = join(textureDir, `${flat.name}.tga`);
-    await writeTga(tgaPath, flat.image, palette);
+    await writeTga(tgaPath, flat.image, palette, false);
     allNames.push(flat.name);
   }
   console.log(`Wrote ${flats.length} flats`);

@@ -261,7 +261,7 @@ export class MapParser {
       const tag = buf.readInt16();
       const front = buf.readInt16();
       const back = buf.readInt16();
-      out.push(new Linedef(this, i, v1, v2, flags, action, {}, front, back));
+      out.push(new Linedef(this, i, v1, v2, flags, action, { arg1: tag }, front, back));
     }
     return out;
   }

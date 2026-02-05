@@ -17,6 +17,7 @@ export class Sector {
   declare lightlevel: number;
   declare special: number;
   declare id: number;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

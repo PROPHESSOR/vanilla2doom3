@@ -7,6 +7,7 @@ import type { MapParser } from '../idTech1/MapParser';
 import { polygonSlabBrush } from './polygonSlabBrush';
 import { verticalWallBrush } from './verticalWallBrush';
 import { rectBrush3d } from './rectBrush3d';
+import { Doom3Map, type Doom3Brush } from './Doom3Map';
 
 export interface Doom3MapOptions {
   /** Thickness of floor/ceiling slabs (default: 8) */
@@ -36,7 +37,7 @@ const mapX = (x: number) => x * 1.5;
 const mapY = (y: number) => y * 1.5;
 const mapZ = (z: number) => z * 1.5;
 
-export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): string {
+export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): Doom3Map {
   const slabThickness = options.slabThickness ?? 8;
   const wallWidth = options.wallWidth ?? 8;
   const polygonExpansion = options.polygonExpansion ?? 0.5;
@@ -44,7 +45,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
   const sealingMargin = options.sealingMargin ?? 256;
   const sealingWallThickness = options.sealingWallThickness ?? 64;
 
-  const brushes: string[] = [];
+  const doom3Map = new Doom3Map();
   const bounds: Bounds = {
     minX: Infinity,
     minY: Infinity,
@@ -91,7 +92,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
     }
 
     // Floor slab (below floor level)
-    const floorBrush = polygonSlabBrush(
+    const floorBrushText = polygonSlabBrush(
       polygon,
       floor - slabThickness,
       slabThickness,
@@ -101,12 +102,13 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       }
     );
 
-    if (floorBrush) {
-      brushes.push(floorBrush);
+    if (floorBrushText) {
+      const brush: Doom3Brush = { text: floorBrushText, sourceSector: sector };
+      doom3Map.addBrushToWorldspawn(brush);
     }
 
     // Ceiling slab (at ceiling level)
-    const ceilingBrush = polygonSlabBrush(
+    const ceilingBrushText = polygonSlabBrush(
       polygon,
       ceiling,
       slabThickness,
@@ -116,8 +118,9 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       }
     );
 
-    if (ceilingBrush) {
-      brushes.push(ceilingBrush);
+    if (ceilingBrushText) {
+      const brush: Doom3Brush = { text: ceilingBrushText, sourceSector: sector };
+      doom3Map.addBrushToWorldspawn(brush);
     }
 
     // Update bounds
@@ -165,7 +168,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       const ceiling = mapZ(sector.heightceiling);
 
       if (ceiling > floor) {
-        const wallBrush = verticalWallBrush(
+        const wallBrushText = verticalWallBrush(
           v1,
           v2,
           floor,
@@ -176,8 +179,9 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           }
         );
 
-        if (wallBrush) {
-          brushes.push(wallBrush);
+        if (wallBrushText) {
+          const brush: Doom3Brush = { text: wallBrushText, sourceLinedef: linedef };
+          doom3Map.addBrushToWorldspawn(brush);
           wallCount++;
         }
       }
@@ -203,7 +207,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const minFloor = Math.min(floor1, floor2);
         const maxFloor = Math.max(floor1, floor2);
 
-        const lowerWallBrush = verticalWallBrush(
+        const lowerWallBrushText = verticalWallBrush(
           v1,
           v2,
           minFloor,
@@ -214,8 +218,9 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           }
         );
 
-        if (lowerWallBrush) {
-          brushes.push(lowerWallBrush);
+        if (lowerWallBrushText) {
+          const brush: Doom3Brush = { text: lowerWallBrushText, sourceLinedef: linedef };
+          doom3Map.addBrushToWorldspawn(brush);
           wallCount++;
         }
       }
@@ -225,7 +230,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const minCeiling = Math.min(ceiling1, ceiling2);
         const maxCeiling = Math.max(ceiling1, ceiling2);
 
-        const upperWallBrush = verticalWallBrush(
+        const upperWallBrushText = verticalWallBrush(
           v1,
           v2,
           minCeiling,
@@ -236,8 +241,9 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           }
         );
 
-        if (upperWallBrush) {
-          brushes.push(upperWallBrush);
+        if (upperWallBrushText) {
+          const brush: Doom3Brush = { text: upperWallBrushText, sourceLinedef: linedef };
+          doom3Map.addBrushToWorldspawn(brush);
           wallCount++;
         }
       }
@@ -261,59 +267,49 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
     const boxHeight = boxMaxY - boxMinY;
     const boxDepth = boxMaxZ - boxMinZ;
 
-    // West wall
-    brushes.push(
-      rectBrush3d(
+    // Sealing box brushes (no source sector/linedef)
+    doom3Map.addBrushToWorldspawn({
+      text: rectBrush3d(
         { x: boxMinX, y: boxMinY, z: boxMinZ },
         { width: sealingWallThickness, depth: boxHeight, height: boxDepth },
         { comment: '// Seal: West wall' }
-      )
-    );
-
-    // East wall
-    brushes.push(
-      rectBrush3d(
+      ),
+    });
+    doom3Map.addBrushToWorldspawn({
+      text: rectBrush3d(
         { x: boxMaxX - sealingWallThickness, y: boxMinY, z: boxMinZ },
         { width: sealingWallThickness, depth: boxHeight, height: boxDepth },
         { comment: '// Seal: East wall' }
-      )
-    );
-
-    // South wall
-    brushes.push(
-      rectBrush3d(
+      ),
+    });
+    doom3Map.addBrushToWorldspawn({
+      text: rectBrush3d(
         { x: boxMinX, y: boxMinY, z: boxMinZ },
         { width: boxWidth, depth: sealingWallThickness, height: boxDepth },
         { comment: '// Seal: South wall' }
-      )
-    );
-
-    // North wall
-    brushes.push(
-      rectBrush3d(
+      ),
+    });
+    doom3Map.addBrushToWorldspawn({
+      text: rectBrush3d(
         { x: boxMinX, y: boxMaxY - sealingWallThickness, z: boxMinZ },
         { width: boxWidth, depth: sealingWallThickness, height: boxDepth },
         { comment: '// Seal: North wall' }
-      )
-    );
-
-    // Bottom
-    brushes.push(
-      rectBrush3d(
+      ),
+    });
+    doom3Map.addBrushToWorldspawn({
+      text: rectBrush3d(
         { x: boxMinX, y: boxMinY, z: boxMinZ },
         { width: boxWidth, depth: boxHeight, height: sealingWallThickness },
         { comment: '// Seal: Bottom' }
-      )
-    );
-
-    // Top
-    brushes.push(
-      rectBrush3d(
+      ),
+    });
+    doom3Map.addBrushToWorldspawn({
+      text: rectBrush3d(
         { x: boxMinX, y: boxMinY, z: boxMaxZ - sealingWallThickness },
         { width: boxWidth, depth: boxHeight, height: sealingWallThickness },
         { comment: '// Seal: Top' }
-      )
-    );
+      ),
+    });
   }
 
   // Find player start
@@ -330,7 +326,6 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       playerY = mapY(thing.y);
 
       // Find sector at player position to get floor height
-      // Simple approach: find first subsector that contains the player point
       for (const subsector of subsectors) {
         const polygon = subsector.getPolygonPoints().map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
         if (polygon.length >= 3 && pointInPolygon({ x: playerX, y: playerY }, polygon)) {
@@ -350,53 +345,44 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
     }
   }
 
-  // Generate map file
-  const lines: string[] = [];
-  lines.push('Version 2');
-  lines.push('// entity 0');
-  lines.push('{');
-  lines.push('    "classname" "worldspawn"');
-
-  // Add all brushes
-  for (const brush of brushes) {
-    if (brush && brush.trim()) {
-      lines.push(brush);
-    }
-  }
-
-  lines.push('}');
-
   // Player start entity
-  lines.push('// entity 1');
-  lines.push('{');
-  lines.push('    "classname" "info_player_start"');
-  lines.push('    "name" "info_player_start_1"');
-  lines.push(`    "origin" "${playerX} ${playerY} ${playerZ}"`);
-  lines.push('}');
+  doom3Map.addEntity({
+    classname: 'info_player_start',
+    properties: {
+      name: 'info_player_start_1',
+      origin: `${playerX} ${playerY} ${playerZ}`,
+    },
+    brushes: [],
+  });
 
   // Player light
-  lines.push('// entity 2');
-  lines.push('{');
-  lines.push('    "classname" "light"');
-  lines.push('    "name" "light_player"');
-  lines.push('    "noshadows" "1"');
-  lines.push('    "light_radius" "4096 4096 4096"');
-  lines.push(`    "origin" "${playerX} ${playerY} ${playerZ + 64}"`);
-  lines.push('}');
+  doom3Map.addEntity({
+    classname: 'light',
+    properties: {
+      name: 'light_player',
+      noshadows: '1',
+      light_radius: '4096 4096 4096',
+      origin: `${playerX} ${playerY} ${playerZ + 64}`,
+    },
+    brushes: [],
+  });
 
   // Fill light
-  lines.push('// entity 3');
-  lines.push('{');
-  lines.push('    "classname" "light"');
-  lines.push('    "name" "light_fill"');
-  lines.push('    "noshadows" "1"');
-  lines.push('    "light_radius" "4096 4096 4096"');
-  lines.push(`    "origin" "${playerX} ${playerY} ${playerZ - 16}"`);
-  lines.push('}');
+  doom3Map.addEntity({
+    classname: 'light',
+    properties: {
+      name: 'light_fill',
+      noshadows: '1',
+      light_radius: '4096 4096 4096',
+      origin: `${playerX} ${playerY} ${playerZ - 16}`,
+    },
+    brushes: [],
+  });
 
-  console.log(`Generated ${brushes.length} total brushes`);
+  const ws = doom3Map.getWorldspawn();
+  console.log(`Generated ${ws.brushes.length} total brushes`);
 
-  return lines.join('\n');
+  return doom3Map;
 }
 
 function pointInPolygon(point: { x: number; y: number }, polygon: { x: number; y: number }[]): boolean {

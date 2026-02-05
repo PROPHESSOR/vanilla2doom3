@@ -35,6 +35,7 @@ export class Linedef {
   declare arg3: number;
   declare arg4: number;
   declare special: number;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

@@ -4,6 +4,8 @@ import { WadParser } from './idTech1/WadParser';
 import { MapParser, type StoredMap } from './idTech1/MapParser';
 import { readByteToolsBufferFromInput } from './idTech1/utils/BrowserFile';
 import { generateDoom3Map } from './idTech4';
+import { MapProcessor } from './processing';
+import { DoorAction } from './processing/actions';
 
 const LAST_MAP_KEY = 'vanilla2doom3-last-map';
 
@@ -215,7 +217,15 @@ function exportDoom3Map() {
 
   try {
     console.log('Generating Doom 3 .map file...');
-    const mapContent = generateDoom3Map(toRaw(mp) as MapParser);
+    const rawMap = toRaw(mp) as MapParser;
+
+    const processor = new MapProcessor([new DoorAction()]);
+    processor.preprocess(rawMap);
+
+    const doom3Map = generateDoom3Map(rawMap);
+    processor.postprocess(doom3Map);
+
+    const mapContent = doom3Map.export();
 
     // Create download
     const blob = new Blob([mapContent], { type: 'text/plain' });

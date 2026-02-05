@@ -16,6 +16,7 @@ export class Sidedef {
   declare texturebottom: string;
   declare texturemiddle: string;
   declare sector: number;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

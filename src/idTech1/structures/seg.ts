@@ -17,6 +17,7 @@ export class Seg {
   declare linedef: number;
   declare side: number;
   declare offset: number;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

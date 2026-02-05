@@ -12,6 +12,7 @@ export class Subsector {
   declare _id: number;
   declare segCount: number;
   declare firstSeg: number;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

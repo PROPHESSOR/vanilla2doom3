@@ -11,6 +11,7 @@ export class Vertex {
   declare _id: number;
   declare x: string;
   declare y: string;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

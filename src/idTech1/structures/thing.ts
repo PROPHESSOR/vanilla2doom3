@@ -13,6 +13,7 @@ export class Thing {
   declare y: number;
   declare angle: number;
   declare type: number;
+  metadata: Record<string, unknown> = {};
 
   constructor(
     public map: MapParser,

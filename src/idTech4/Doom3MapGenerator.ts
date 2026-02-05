@@ -32,6 +32,10 @@ interface Bounds {
   maxZ: number;
 }
 
+const mapX = (x: number) => x * 1.5;
+const mapY = (y: number) => y * 1.5;
+const mapZ = (z: number) => z * 1.5;
+
 export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): string {
   const slabThickness = options.slabThickness ?? 8;
   const wallWidth = options.wallWidth ?? 8;
@@ -59,7 +63,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
   let skippedSubsectors = 0;
 
   for (const subsector of subsectors) {
-    const polygon = subsector.getPolygonPoints();
+    const polygon = subsector.getPolygonPoints().map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
 
     if (polygon.length < 3) {
       skippedSubsectors++;
@@ -78,8 +82,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       continue;
     }
 
-    const floor = sector.heightfloor;
-    const ceiling = sector.heightceiling;
+    const floor = mapZ(sector.heightfloor);
+    const ceiling = mapZ(sector.heightceiling);
 
     if (ceiling <= floor) {
       skippedSubsectors++;
@@ -146,8 +150,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
 
     if (!v1Obj || !v2Obj) continue;
 
-    const v1 = { x: parseFloat(v1Obj.x), y: parseFloat(v1Obj.y) };
-    const v2 = { x: parseFloat(v2Obj.x), y: parseFloat(v2Obj.y) };
+    const v1 = { x: mapX(parseFloat(v1Obj.x)), y: mapY(parseFloat(v1Obj.y)) };
+    const v2 = { x: mapX(parseFloat(v2Obj.x)), y: mapY(parseFloat(v2Obj.y)) };
 
     // One-sided linedef: create full wall
     if (linedef.sideback < 0) {
@@ -157,8 +161,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       const sector = sectors[sidefront.sector];
       if (!sector) continue;
 
-      const floor = sector.heightfloor;
-      const ceiling = sector.heightceiling;
+      const floor = mapZ(sector.heightfloor);
+      const ceiling = mapZ(sector.heightceiling);
 
       if (ceiling > floor) {
         const wallBrush = verticalWallBrush(
@@ -189,10 +193,10 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
 
       if (!sectorFront || !sectorBack) continue;
 
-      const floor1 = sectorFront.heightfloor;
-      const ceiling1 = sectorFront.heightceiling;
-      const floor2 = sectorBack.heightfloor;
-      const ceiling2 = sectorBack.heightceiling;
+      const floor1 = mapZ(sectorFront.heightfloor);
+      const ceiling1 = mapZ(sectorFront.heightceiling);
+      const floor2 = mapZ(sectorBack.heightfloor);
+      const ceiling2 = mapZ(sectorBack.heightceiling);
 
       // Lower wall if floors differ
       if (floor1 !== floor2) {
@@ -322,19 +326,19 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
   for (const thing of things) {
     if (thing.type === 1) {
       // Player 1 start
-      playerX = thing.x;
-      playerY = thing.y;
+      playerX = mapX(thing.x);
+      playerY = mapY(thing.y);
 
       // Find sector at player position to get floor height
       // Simple approach: find first subsector that contains the player point
       for (const subsector of subsectors) {
-        const polygon = subsector.getPolygonPoints();
+        const polygon = subsector.getPolygonPoints().map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
         if (polygon.length >= 3 && pointInPolygon({ x: playerX, y: playerY }, polygon)) {
           const sectorIndex = subsector.sectorIndex;
           if (sectorIndex !== undefined && sectorIndex < sectors.length) {
             const sector = sectors[sectorIndex];
             if (sector) {
-              playerZ = sector.heightfloor + 16;
+              playerZ = mapZ(sector.heightfloor) + 0;
               break;
             }
           }

@@ -10,3 +10,11 @@ export interface ImageBuffer {
   /** Palette indices; TRANSPARENT (0xFFFF) = no pixel drawn. */
   pixels: Uint16Array;
 }
+
+/** Returns true if any pixel in the image is transparent. */
+export function hasTransparency(image: ImageBuffer): boolean {
+  for (let i = 0; i < image.pixels.length; i++) {
+    if (image.pixels[i] === TRANSPARENT) return true;
+  }
+  return false;
+}

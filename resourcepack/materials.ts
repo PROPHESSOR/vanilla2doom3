@@ -1,16 +1,13 @@
 /**
  * Generate a Doom 3 .mtr material file declaring every extracted texture.
  *
- * Each declaration maps a material path to its diffusemap TGA.
- * Format:
- *   textures/<prefix>/<NAME>
- *   {
- *       diffusemap textures/<prefix>/<NAME>
- *   }
+ * Textures listed in `transparentNames` get an additional `alphaTest 0.5`
+ * so Doom 3 cuts out transparent pixels using the TGA alpha channel.
  */
 export function generateMaterialFile(
   prefix: string,
   textureNames: string[],
+  transparentNames: ReadonlySet<string>,
 ): string {
   const lines: string[] = [];
 
@@ -18,6 +15,9 @@ export function generateMaterialFile(
     const matPath = `textures/${prefix}/${name}`;
     lines.push(matPath);
     lines.push('{');
+    if (transparentNames.has(name)) {
+      lines.push(`    alphaTest 0.5`);
+    }
     lines.push(`    diffusemap ${matPath}`);
     lines.push('}');
     lines.push('');

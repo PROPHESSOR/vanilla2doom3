@@ -2,15 +2,17 @@ import { TRANSPARENT, type ImageBuffer } from './types.ts';
 import { paletteRGB, type Palette } from './palette.ts';
 
 /**
- * Encode an indexed-color ImageBuffer into an uncompressed 24-bit TGA (type 2).
+ * Encode an indexed-color ImageBuffer into an uncompressed 32-bit TGA (type 2).
  *
- * TGA pixel order: bottom-to-top rows, BGR byte order.
- * Transparent pixels are written as magenta (R255 G0 B255).
+ * TGA pixel order: bottom-to-top rows, BGRA byte order.
+ * Transparent pixels get alpha=0 (and magenta RGB so they're visible if alpha
+ * is ever ignored). Opaque pixels get alpha=255.
  */
 export function encodeTga(image: ImageBuffer, palette: Palette): Uint8Array {
   const { width, height, pixels } = image;
   const HEADER_SIZE = 18;
-  const dataSize = width * height * 3;
+  const BPP = 4; // BGRA
+  const dataSize = width * height * BPP;
   const tga = new Uint8Array(HEADER_SIZE + dataSize);
 
   // TGA header
@@ -24,23 +26,24 @@ export function encodeTga(image: ImageBuffer, palette: Palette): Uint8Array {
   tga[13] = (width >> 8) & 0xff;
   tga[14] = height & 0xff;
   tga[15] = (height >> 8) & 0xff;
-  tga[16] = 24; // bits per pixel
-  tga[17] = 0; // image descriptor
+  tga[16] = 32; // bits per pixel (BGRA)
+  tga[17] = 8; // image descriptor: 8 alpha bits
 
   let offset = HEADER_SIZE;
   for (let y = height - 1; y >= 0; y--) {
     for (let x = 0; x < width; x++) {
       const idx = pixels[y * width + x];
       if (idx === TRANSPARENT || idx >= 256) {
-        // Magenta = visible "transparent" marker
-        tga[offset++] = 255; // B
+        tga[offset++] = 255; // B  (magenta fallback)
         tga[offset++] = 0; // G
         tga[offset++] = 255; // R
+        tga[offset++] = 0; // A  = fully transparent
       } else {
         const [r, g, b] = paletteRGB(palette, idx);
         tga[offset++] = b;
         tga[offset++] = g;
         tga[offset++] = r;
+        tga[offset++] = 255; // A = fully opaque
       }
     }
   }

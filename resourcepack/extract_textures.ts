@@ -10,6 +10,7 @@ import { compositeTexture } from './composite.ts';
 import { extractFlats } from './flats.ts';
 import { writeTga } from './tga.ts';
 import { generateMaterialFile } from './materials.ts';
+import { hasTransparency } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -79,6 +80,7 @@ async function main() {
   await Deno.mkdir(materialDir, { recursive: true });
 
   const allNames: string[] = [];
+  const transparentNames = new Set<string>();
 
   // 6. Composite wall textures → TGA
   console.log('Compositing wall textures...');
@@ -87,10 +89,11 @@ async function main() {
     const tgaPath = join(textureDir, `${def.name}.tga`);
     await writeTga(tgaPath, image, palette);
     allNames.push(def.name);
+    if (hasTransparency(image)) transparentNames.add(def.name);
   }
-  console.log(`Wrote ${textureDefs.length} wall textures`);
+  console.log(`Wrote ${textureDefs.length} wall textures (${transparentNames.size} with alpha)`);
 
-  // 7. Extract flats → TGA
+  // 7. Extract flats → TGA (always fully opaque)
   console.log('Extracting flats...');
   const flats = extractFlats(wad);
   for (const flat of flats) {
@@ -101,7 +104,7 @@ async function main() {
   console.log(`Wrote ${flats.length} flats`);
 
   // 8. Doom 3 material file
-  const mtrContent = generateMaterialFile(prefix, allNames);
+  const mtrContent = generateMaterialFile(prefix, allNames, transparentNames);
   const mtrPath = join(materialDir, `${prefix}.mtr`);
   await Deno.writeTextFile(mtrPath, mtrContent);
   console.log(`Wrote material file: ${mtrPath}`);

@@ -60,24 +60,31 @@ export function convertToList(tree: QuadTree): Seg | null {
     result = listAddSeg(result, seg);
   }
 
-  if (tree.subs[0] !== null) {
+  if (tree.subs[0] !== null && tree.subs[1] !== null) {
     const left = convertToList(tree.subs[0]);
-    const right = convertToList(tree.subs[1]!);
+    const right = convertToList(tree.subs[1]);
 
-    // Concatenate lists
-    let tail = result;
-    if (tail) {
-      while (tail.next) tail = tail.next;
-      tail.next = left;
-      tail = left;
-      while (tail && tail.next) tail = tail.next;
-      if (tail) tail.next = right;
-    } else {
+    // Concatenate lists properly handling null cases
+    // Find tail of result and append left
+    if (result === null) {
       result = left;
-      tail = left;
-      while (tail && tail.next) tail = tail.next;
-      if (tail) tail.next = right;
-      else result = right;
+    } else {
+      let tail: Seg | null = result;
+      while (tail.next !== null) {
+        tail = tail.next;
+      }
+      tail.next = left;
+    }
+
+    // Find tail of result (now including left) and append right
+    if (result === null) {
+      result = right;
+    } else {
+      let tail: Seg | null = result;
+      while (tail.next !== null) {
+        tail = tail.next;
+      }
+      tail.next = right;
     }
   }
 

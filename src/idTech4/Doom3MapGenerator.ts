@@ -4,6 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 import type { MapParser } from '../idTech1/MapParser';
+import type { TextureSizeMap } from '../idTech1/TextureSizes';
 import { polygonSlabBrush } from './polygonSlabBrush';
 import { verticalWallBrush } from './verticalWallBrush';
 import { rectBrush3d } from './rectBrush3d';
@@ -22,6 +23,10 @@ export interface Doom3MapOptions {
   sealingMargin?: number;
   /** Wall thickness for sealing box (default: 64) */
   sealingWallThickness?: number;
+  /** Texture prefix for Doom 3 material paths, e.g. "v2d3" → "textures/v2d3/STONE1" */
+  texturePrefix?: string;
+  /** Texture name → dimensions from TEXTURE1/2; used for per-texture UV scale. */
+  textureSizes?: TextureSizeMap;
 }
 
 interface Bounds {
@@ -37,6 +42,42 @@ const mapX = (x: number) => x * 1.5;
 const mapY = (y: number) => y * 1.5;
 const mapZ = (z: number) => z * 1.5;
 
+/**
+ * Convert a Doom texture name to a Doom 3 material path.
+ * Strips surrounding quotes (sidedefs store names as `"NAME"`).
+ * Returns undefined for `-` or empty (= no texture).
+ */
+function mapTexture(raw: string, prefix: string): string | undefined {
+  const name = raw.replace(/^"|"$/g, '').toUpperCase();
+  if (!name || name === '-') return undefined;
+  return `textures/${prefix}/${name}`;
+}
+
+// Texture UV scales: 1 texel = 1 Doom unit = 1.5 world units (mapX/Y/Z scale).
+// scale = 1 / (texture_pixels * coordinate_scale)
+const COORD_SCALE = 1.5;
+const DEFAULT_FLAT_SIZE = 64;
+const DEFAULT_WALL_SIZE = 128;
+
+/**
+ * Compute per-axis UV scale for a texture based on its pixel dimensions.
+ * Extracts the texture name from the full material path (textures/prefix/NAME).
+ */
+function textureScales(
+  materialPath: string | undefined,
+  sizes: TextureSizeMap | undefined,
+  defaultSize: number,
+): { textureScaleS: number; textureScaleT: number } {
+  const texName = materialPath?.split('/').pop()?.toUpperCase();
+  const dim = texName ? sizes?.get(texName) : undefined;
+  const w = dim?.width ?? defaultSize;
+  const h = dim?.height ?? defaultSize;
+  return {
+    textureScaleS: 1 / (w * COORD_SCALE),
+    textureScaleT: 1 / (h * COORD_SCALE),
+  };
+}
+
 export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): Doom3Map {
   const slabThickness = options.slabThickness ?? 8;
   const wallWidth = options.wallWidth ?? 8;
@@ -44,6 +85,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
   const addSealingBox = options.addSealingBox ?? true;
   const sealingMargin = options.sealingMargin ?? 256;
   const sealingWallThickness = options.sealingWallThickness ?? 64;
+  const texturePrefix = options.texturePrefix ?? 'v2d3';
+  const texSizes = options.textureSizes;
 
   const doom3Map = new Doom3Map();
   const bounds: Bounds = {
@@ -92,12 +135,15 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
     }
 
     // Floor slab (below floor level)
+    const floorTex = mapTexture(sector.texturefloor, texturePrefix);
     const floorBrushText = polygonSlabBrush(
       polygon,
       floor - slabThickness,
       slabThickness,
       {
         expandAmount: polygonExpansion,
+        texture: floorTex,
+        ...textureScales(floorTex, texSizes, DEFAULT_FLAT_SIZE),
         comment: `// Subsector ${subsector._id} floor (sector ${sectorIndex})`,
       }
     );
@@ -108,12 +154,15 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
     }
 
     // Ceiling slab (at ceiling level)
+    const ceilTex = mapTexture(sector.textureceiling, texturePrefix);
     const ceilingBrushText = polygonSlabBrush(
       polygon,
       ceiling,
       slabThickness,
       {
         expandAmount: polygonExpansion,
+        texture: ceilTex,
+        ...textureScales(ceilTex, texSizes, DEFAULT_FLAT_SIZE),
         comment: `// Subsector ${subsector._id} ceiling (sector ${sectorIndex})`,
       }
     );
@@ -168,6 +217,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       const ceiling = mapZ(sector.heightceiling);
 
       if (ceiling > floor) {
+        const midTex = mapTexture(sidefront.texturemiddle, texturePrefix);
         const wallBrushText = verticalWallBrush(
           v1,
           v2,
@@ -175,6 +225,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           ceiling,
           {
             width: wallWidth,
+            texture: midTex,
+            ...textureScales(midTex, texSizes, DEFAULT_WALL_SIZE),
             comment: `// Linedef ${linedef._id} one-sided wall`,
           }
         );
@@ -207,6 +259,11 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const minFloor = Math.min(floor1, floor2);
         const maxFloor = Math.max(floor1, floor2);
 
+        // Lower texture: from the side whose sector has the higher floor
+        const lowerTex = floor2 > floor1
+          ? mapTexture(sidefront.texturebottom, texturePrefix)
+          : mapTexture(sideback.texturebottom, texturePrefix);
+
         const lowerWallBrushText = verticalWallBrush(
           v1,
           v2,
@@ -214,6 +271,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           maxFloor,
           {
             width: wallWidth,
+            texture: lowerTex,
+            ...textureScales(lowerTex, texSizes, DEFAULT_WALL_SIZE),
             comment: `// Linedef ${linedef._id} lower wall`,
           }
         );
@@ -230,6 +289,11 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const minCeiling = Math.min(ceiling1, ceiling2);
         const maxCeiling = Math.max(ceiling1, ceiling2);
 
+        // Upper texture: from the side whose sector has the higher ceiling
+        const upperTex = ceiling2 < ceiling1
+          ? mapTexture(sidefront.texturetop, texturePrefix)
+          : mapTexture(sideback.texturetop, texturePrefix);
+
         const upperWallBrushText = verticalWallBrush(
           v1,
           v2,
@@ -237,6 +301,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           maxCeiling,
           {
             width: wallWidth,
+            texture: upperTex,
+            ...textureScales(upperTex, texSizes, DEFAULT_WALL_SIZE),
             comment: `// Linedef ${linedef._id} upper wall`,
           }
         );

@@ -40,3 +40,19 @@ export async function readByteToolsBufferFromInput(input: HTMLInputElement) {
 
   return new ByteTools(dataView);
 }
+
+/**
+ * Read a File object directly into ByteTools.
+ */
+export function readFileToByteTools(file: File): Promise<ByteTools> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result;
+      if (!result) return reject(new Error('Failed to read file'));
+      resolve(new ByteTools(new DataView(result as ArrayBuffer)));
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsArrayBuffer(file);
+  });
+}

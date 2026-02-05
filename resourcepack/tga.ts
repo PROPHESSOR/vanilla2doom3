@@ -5,7 +5,7 @@ import { paletteRGB, type Palette } from './palette.ts';
  * Encode an indexed-color ImageBuffer into an uncompressed 24-bit TGA (type 2).
  * No alpha channel — fully opaque. Use for the majority of textures.
  *
- * TGA pixel order: bottom-to-top rows, BGR byte order.
+ * Origin at top-left (descriptor bit 5 set). Rows written top-to-bottom, BGR.
  */
 function encodeTga24(image: ImageBuffer, palette: Palette): Uint8Array {
   const { width, height, pixels } = image;
@@ -21,14 +21,13 @@ function encodeTga24(image: ImageBuffer, palette: Palette): Uint8Array {
   tga[14] = height & 0xff;
   tga[15] = (height >> 8) & 0xff;
   tga[16] = 24; // bpp
-  tga[17] = 0; // image descriptor
+  tga[17] = 0x20; // image descriptor: top-left origin (bit 5)
 
   let offset = HEADER_SIZE;
-  for (let y = height - 1; y >= 0; y--) {
+  for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = pixels[y * width + x];
       if (idx === TRANSPARENT || idx >= 256) {
-        // Should not happen for opaque textures; fall back to black
         tga[offset++] = 0;
         tga[offset++] = 0;
         tga[offset++] = 0;
@@ -47,6 +46,8 @@ function encodeTga24(image: ImageBuffer, palette: Palette): Uint8Array {
  * Encode an indexed-color ImageBuffer into an uncompressed 32-bit TGA (type 2).
  * Includes alpha channel: 0 for transparent pixels, 255 for opaque.
  * Transparent pixels get magenta RGB as a visible fallback.
+ *
+ * Origin at top-left (descriptor bit 5 set). Rows written top-to-bottom, BGRA.
  */
 function encodeTga32(image: ImageBuffer, palette: Palette): Uint8Array {
   const { width, height, pixels } = image;
@@ -62,10 +63,10 @@ function encodeTga32(image: ImageBuffer, palette: Palette): Uint8Array {
   tga[14] = height & 0xff;
   tga[15] = (height >> 8) & 0xff;
   tga[16] = 32; // bpp (BGRA)
-  tga[17] = 8; // image descriptor: 8 alpha bits
+  tga[17] = 0x28; // image descriptor: top-left origin (bit 5) + 8 alpha bits
 
   let offset = HEADER_SIZE;
-  for (let y = height - 1; y >= 0; y--) {
+  for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = pixels[y * width + x];
       if (idx === TRANSPARENT || idx >= 256) {

@@ -1,8 +1,11 @@
 /**
  * Generate a Doom 3 .mtr material file declaring every extracted texture.
  *
- * Textures listed in `transparentNames` get an additional `alphaTest 0.5`
- * so Doom 3 cuts out transparent pixels using the TGA alpha channel.
+ * Uses the `diffusemap` shorthand which properly sets GL_REPEAT (tiling).
+ * The explicit stage syntax `{ blend diffusemap; map ...; }` can cause
+ * clamping in some engine versions — avoid it.
+ *
+ * Textures listed in `transparentNames` get alphaTest for cutout transparency.
  */
 export function generateMaterialFile(
   prefix: string,
@@ -15,8 +18,10 @@ export function generateMaterialFile(
     const matPath = `textures/${prefix}/${name}`;
     lines.push(matPath);
     lines.push('{');
+    lines.push('    noSelfShadow');
+    lines.push('    noshadows');
     if (transparentNames.has(name)) {
-      lines.push(`    alphaTest 0.5`);
+      lines.push('    alphaTest 0.5');
     }
     lines.push(`    diffusemap ${matPath}`);
     lines.push('}');

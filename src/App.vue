@@ -2,7 +2,8 @@
 import { ref, computed, toRaw } from 'vue';
 import { WadParser } from './idTech1/WadParser';
 import { MapParser, type StoredMap } from './idTech1/MapParser';
-import { readByteToolsBufferFromInput } from './idTech1/utils/BrowserFile';
+import { readFileToByteTools } from './idTech1/utils/BrowserFile';
+import { parseTextureSizes } from './idTech1/TextureSizes';
 import { generateDoom3Map } from './idTech4';
 import { MapProcessor } from './processing';
 import { DoorAction } from './processing/actions';
@@ -14,7 +15,14 @@ interface MapChoice {
   index: number;
 }
 
-const wadParser = ref<WadParser | null>(null);
+// Selected files (not yet parsed)
+const mapWadFile = ref<File | null>(null);
+const baseIwadFile = ref<File | null>(null);
+const useCurrentWadAsIwad = ref(true);
+
+// Parsed state
+const mapWadParser = ref<WadParser | null>(null);
+const baseWadParser = ref<WadParser | null>(null);
 const mapParser = ref<MapParser | null>(null);
 const maps = ref<MapChoice[]>([]);
 const error = ref<string | null>(null);
@@ -22,35 +30,60 @@ const loading = ref(false);
 const hoveredSubsectorIndex = ref<number | null>(null);
 const tooltipPos = ref({ x: 0, y: 0 });
 
+// Backward compat: expose on window for debugging
 (window as any).mapParser = mapParser;
-(window as any).wadParser = wadParser;
+(window as any).mapWadParser = mapWadParser;
 
-async function onWadSelected(event: Event) {
+const canLoad = computed(() => !!mapWadFile.value && !loading.value);
+const mapWadFileName = computed(() => mapWadFile.value?.name ?? '');
+const baseIwadFileName = computed(() => baseIwadFile.value?.name ?? '');
+
+function onMapWadSelected(event: Event) {
   const input = event.target as HTMLInputElement;
-  if (!input?.files?.length) return;
+  mapWadFile.value = input?.files?.[0] ?? null;
+  input.value = '';
+}
+
+function onBaseIwadSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  baseIwadFile.value = input?.files?.[0] ?? null;
+  input.value = '';
+}
+
+async function loadWads() {
+  if (!mapWadFile.value) return;
   error.value = null;
   loading.value = true;
+  mapParser.value = null;
+  maps.value = [];
+
   try {
-    const buffer = await readByteToolsBufferFromInput(input);
-    if (!buffer) {
-      error.value = 'Failed to read file';
-      return;
+    // Parse map WAD
+    const mapBuffer = await readFileToByteTools(mapWadFile.value);
+    const mapWad = new WadParser(mapBuffer);
+    await mapWad.parse();
+    mapWadParser.value = mapWad;
+
+    // Parse base IWAD (or reuse map WAD)
+    if (!useCurrentWadAsIwad.value && baseIwadFile.value) {
+      const baseBuffer = await readFileToByteTools(baseIwadFile.value);
+      const baseWad = new WadParser(baseBuffer);
+      await baseWad.parse();
+      baseWadParser.value = baseWad;
+    } else {
+      baseWadParser.value = mapWad;
     }
-    const wad = new WadParser(buffer);
-    await wad.parse();
-    wadParser.value = wad;
-    maps.value = wad.getMaps().map((l) => ({ name: l.name, index: l.index }));
-    mapParser.value = null;
+
+    maps.value = mapWad.getMaps().map((l) => ({ name: l.name, index: l.index }));
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to parse WAD';
   } finally {
     loading.value = false;
-    input.value = '';
   }
 }
 
 function selectMap(choice: MapChoice) {
-  const wad = wadParser.value;
+  const wad = mapWadParser.value;
   if (!wad) return;
   error.value = null;
   try {
@@ -76,7 +109,8 @@ function loadLastMap() {
     const parser = new MapParser({} as WadParser);
     parser.loadFromSnapshot(stored);
     mapParser.value = parser;
-    wadParser.value = null;
+    mapWadParser.value = null;
+    baseWadParser.value = null;
     maps.value = [];
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load last map';
@@ -222,7 +256,11 @@ function exportDoom3Map() {
     const processor = new MapProcessor([new DoorAction()]);
     processor.preprocess(rawMap);
 
-    const doom3Map = generateDoom3Map(rawMap);
+    // Build texture size map from base WAD (IWAD or map WAD)
+    const baseWad = baseWadParser.value ?? mapWadParser.value;
+    const textureSizes = baseWad ? parseTextureSizes(toRaw(baseWad) as WadParser) : undefined;
+
+    const doom3Map = generateDoom3Map(rawMap, { textureSizes });
     processor.postprocess(doom3Map);
 
     const mapContent = doom3Map.export();
@@ -254,12 +292,31 @@ const VERTEX_CIRCLE_R = 5;
 
     <div v-if="error" class="error">{{ error }}</div>
 
-    <!-- Step 1: Select WAD -->
-    <section v-if="!wadParser && !mapParser" class="step">
-      <label class="file-label">
-        <span>Select WAD file</span>
-        <input type="file" accept=".wad" :disabled="loading" @change="onWadSelected" />
-      </label>
+    <!-- Step 1: Select WAD files and load -->
+    <section v-if="!mapWadParser && !mapParser" class="step">
+      <div class="wad-inputs">
+        <label class="file-label">
+          <span>Map WAD</span>
+          <input type="file" accept=".wad" :disabled="loading" @change="onMapWadSelected" />
+          <span v-if="mapWadFileName" class="file-name">{{ mapWadFileName }}</span>
+        </label>
+
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="useCurrentWadAsIwad" :disabled="loading" />
+          <span>Use current WAD as IWAD</span>
+        </label>
+
+        <label v-if="!useCurrentWadAsIwad" class="file-label">
+          <span>Base IWAD</span>
+          <input type="file" accept=".wad" :disabled="loading" @change="onBaseIwadSelected" />
+          <span v-if="baseIwadFileName" class="file-name">{{ baseIwadFileName }}</span>
+        </label>
+
+        <button type="button" class="btn-load" :disabled="!canLoad" @click="loadWads">
+          Load
+        </button>
+      </div>
+
       <p v-if="hasLastMap" class="load-last">
         <button type="button" class="btn-secondary" :disabled="loading" @click="loadLastMap">
           Load last map
@@ -269,7 +326,7 @@ const VERTEX_CIRCLE_R = 5;
     </section>
 
     <!-- Step 2: Choose map -->
-    <section v-if="wadParser && !mapParser" class="step">
+    <section v-if="mapWadParser && !mapParser" class="step">
       <h2>Choose map</h2>
       <ul class="map-list">
         <li v-for="choice in maps" :key="choice.index">
@@ -402,6 +459,52 @@ h2 {
 
 .map-list button:hover {
   background: #444;
+}
+
+.wad-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 360px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+}
+
+.file-name {
+  font-size: 0.8rem;
+  color: #8bc34a;
+}
+
+.btn-load {
+  padding: 0.6rem 1.2rem;
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  align-self: flex-start;
+}
+
+.btn-load:hover:not(:disabled) {
+  background: #388e3c;
+}
+
+.btn-load:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .load-last {

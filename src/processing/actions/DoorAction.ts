@@ -6,6 +6,8 @@
 import type { MapParser } from '../../idTech1/MapParser';
 import type { Sector } from '../../idTech1/structures/sector';
 import type { Doom3Map } from '../../idTech4/Doom3Map';
+import type { Doom3Brush } from '../../idTech4/Doom3Map';
+import { polygonSlabBrush } from '../../idTech4/polygonSlabBrush';
 import type { Action } from '../Action';
 
 // Classic Doom linedef specials that represent door actions
@@ -24,8 +26,6 @@ const DOOR_SPECIALS = new Set([
 
 // Default open height for a door when original ceiling == floor
 const DEFAULT_DOOR_OPEN_HEIGHT = 128;
-
-const DOOR_MODEL = 'models/mapobjects/doors/deldoor1/deldoor1.lwo';
 
 const mapX = (x: number) => x * 1.5;
 const mapY = (y: number) => y * 1.5;
@@ -66,10 +66,10 @@ export class DoorAction implements Action {
   }
 
   postprocess(doom3Map: Doom3Map): void {
-    // Collect door sectors from worldspawn brushes
     const ws = doom3Map.getWorldspawn();
-    const doorSectors = new Map<number, Sector>();
 
+    // Collect unique door sectors from worldspawn brushes
+    const doorSectors = new Map<number, Sector>();
     for (const brush of ws.brushes) {
       const sector = brush.sourceSector;
       if (sector?.metadata.isDoor && !doorSectors.has(sector._id)) {
@@ -77,57 +77,24 @@ export class DoorAction implements Action {
       }
     }
 
-    // Add a func_door entity per door sector
+    // Build a func_door entity per door sector with a new full-height brush
     let doorIndex = 0;
     for (const [, sector] of doorSectors) {
-      // Compute door center from sector linedefs
-      const sectorLinedefs = sector.linedefs;
-      if (sectorLinedefs.length === 0) continue;
+      const brushes = this.buildDoorBrushes(sector);
+      if (brushes.length === 0) continue;
 
-      let minX = Infinity, maxX = -Infinity;
-      let minY = Infinity, maxY = -Infinity;
-
-      for (const ld of sectorLinedefs) {
-        const v1 = ld.vertex1;
-        const v2 = ld.vertex2;
-        if (v1) {
-          const x = mapX(parseFloat(v1.x));
-          const y = mapY(parseFloat(v1.y));
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
-        if (v2) {
-          const x = mapX(parseFloat(v2.x));
-          const y = mapY(parseFloat(v2.y));
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
-      }
-
-      if (!isFinite(minX)) continue;
-
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
-      const floorZ = mapZ(sector.heightfloor);
-
+      const entityName = `door_${doorIndex}`;
       doom3Map.addEntity({
         classname: 'func_door',
         properties: {
-          name: `door_${doorIndex}`,
-          model: DOOR_MODEL,
-          origin: `${centerX} ${centerY} ${floorZ}`,
+          name: entityName,
+          model: entityName,
           lip: '8',
-          snd_open: 'sound/ed/door/door_open_01.wav',
-          snd_close: 'sound/ed/door/door_close_01.wav',
-          movedir: '0 0 1',
+          movedir: '-1',
           speed: '100',
           wait: '3',
         },
-        brushes: [],
+        brushes,
       });
       doorIndex++;
     }
@@ -135,6 +102,40 @@ export class DoorAction implements Action {
     if (doorIndex > 0) {
       console.log(`[DoorAction] Added ${doorIndex} func_door entities`);
     }
+  }
+
+  /** Generate full-height door brushes (floor to ceiling) from all subsectors of a door sector. */
+  private buildDoorBrushes(sector: Sector): Doom3Brush[] {
+    const map = sector.map;
+    const subsectors = map.subsectors ?? [];
+    const sectors = map.sectors ?? [];
+    const brushes: Doom3Brush[] = [];
+
+    const floor = mapZ(sector.heightfloor);
+    const ceiling = mapZ(sector.heightceiling);
+    const height = ceiling - floor;
+    if (height <= 0) return brushes;
+
+    for (const subsector of subsectors) {
+      if (subsector.sectorIndex === undefined) continue;
+      if (sectors[subsector.sectorIndex] !== sector) continue;
+
+      const polygon = subsector.getPolygonPoints().map((p) => ({
+        x: mapX(p.x),
+        y: mapY(p.y),
+      }));
+      if (polygon.length < 3) continue;
+
+      const text = polygonSlabBrush(polygon, floor, height, {
+        expandAmount: 0.5,
+        comment: `// Door brush (sector ${sector._id}, subsector ${subsector._id})`,
+      });
+      if (text) {
+        brushes.push({ text, sourceSector: sector });
+      }
+    }
+
+    return brushes;
   }
 
   private markAsDoor(sector: Sector, allSectors: Sector[]): void {

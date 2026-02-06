@@ -9,6 +9,8 @@ import { rectBrush3d, type RectBrush3dOptions } from './rectBrush3d';
 
 export interface VerticalWallBrushOptions extends RectBrush3dOptions {
   width?: number;
+  /** Thickness offset to avoid z-fighting at corners (default: 0) */
+  cornerOffset?: number;
 }
 
 /**
@@ -23,6 +25,7 @@ export function verticalWallBrush(
   options: VerticalWallBrushOptions = {}
 ): string {
   const width = options.width ?? 8;
+  const cornerOffset = options.cornerOffset ?? 0;
 
   const lineVector = vec2Direction(v1, v2);
   const length = vec2Length(lineVector);
@@ -40,10 +43,11 @@ export function verticalWallBrush(
   const dir = vec2Normalize(lineVector);
   const right = vec2Normalize(vec2Perpendicular(dir));
 
-  // Origin is at v1, offset by half width perpendicular to the line
+  // Origin is at v1, wall extrudes towards back side (perpendicular direction)
+  // Apply corner offset to avoid z-fighting at wall intersections
   const origin = {
-    x: v1.x - right.x * width / 2,
-    y: v1.y - right.y * width / 2,
+    x: v1.x + dir.x * cornerOffset,
+    y: v1.y + dir.y * cornerOffset,
     z: zBottom,
   };
 
@@ -52,7 +56,7 @@ export function verticalWallBrush(
 
   return rectBrush3d(
     origin,
-    { width: length, depth: width, height },
+    { width: length - cornerOffset * 2, depth: width, height },
     {
       ...options,
       rotationDeg: rotation,

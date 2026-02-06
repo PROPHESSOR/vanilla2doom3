@@ -91,15 +91,15 @@ function isSkyFlat(texName: string): boolean {
 }
 
 export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): Doom3Map {
-  const slabThickness = options.slabThickness ?? 8;
-  const wallWidth = options.wallWidth ?? 8;
-  const polygonExpansion = options.polygonExpansion ?? 2.0;
+  const slabThickness = options.slabThickness ?? 0.5;
+  const wallWidth = options.wallWidth ?? 0.5;
+  const polygonExpansion = options.polygonExpansion ?? 0;
   const addSealingBox = options.addSealingBox ?? true;
   const sealingMargin = options.sealingMargin ?? 256;
   const sealingWallThickness = options.sealingWallThickness ?? 64;
   const texturePrefix = options.texturePrefix ?? 'v2d3';
   const texSizes = options.textureSizes;
-  const wallsToFlatsOffset = 0.1; // Small offset to prevent z-fighting between walls and floor/ceiling slabs
+  const zFightingOffset = 0; // Small offset to prevent z-fighting between walls and floor/ceiling slabs
 
   const doom3Map = new Doom3Map();
   const bounds: Bounds = {
@@ -242,6 +242,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           ceiling,
           {
             width: wallWidth,
+            cornerOffset: zFightingOffset,
             texture: midTex,
             ...params,
             comment: `// Linedef ${linedef._id} one-sided wall`,
@@ -284,9 +285,10 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           v1,
           v2,
           minFloor,
-          maxFloor - wallsToFlatsOffset,
+          maxFloor - slabThickness,
           {
             width: wallWidth,
+            cornerOffset: zFightingOffset,
             texture: lowerTex,
             ...textureParams(lowerTex, texSizes, DEFAULT_WALL_SIZE, lowerSide.offsetx, lowerSide.offsety),
             comment: `// Linedef ${linedef._id} lower wall`,
@@ -333,10 +335,11 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const upperWallBrushText = verticalWallBrush(
           v1,
           v2,
-          minCeiling + wallsToFlatsOffset,
+          minCeiling + slabThickness,
           maxCeiling,
           {
             width: wallWidth,
+            cornerOffset: zFightingOffset,
             texture: upperTex,
             ...upperParams,
             comment: `// Linedef ${linedef._id} upper wall`,

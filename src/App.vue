@@ -253,12 +253,12 @@ function exportDoom3Map() {
     console.log('Generating Doom 3 .map file...');
     const rawMap = toRaw(mp) as MapParser;
 
-    const processor = new MapProcessor([new DoorAction()]);
-    processor.preprocess(rawMap);
-
     // Build texture size map from base WAD (IWAD or map WAD)
     const baseWad = baseWadParser.value ?? mapWadParser.value;
     const textureSizes = baseWad ? parseTextureSizes(toRaw(baseWad) as WadParser) : undefined;
+
+    const processor = new MapProcessor([new DoorAction({ textureSizes })]);
+    processor.preprocess(rawMap);
 
     const doom3Map = generateDoom3Map(rawMap, { textureSizes });
     processor.postprocess(doom3Map);

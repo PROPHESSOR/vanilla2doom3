@@ -4,6 +4,7 @@
 // https://opensource.org/licenses/MIT
 
 import type { MapParser } from '../../idTech1/MapParser';
+import type { TextureSizeMap } from '../../idTech1/TextureSizes';
 import type { Sector } from '../../idTech1/structures/sector';
 import type { Doom3Map } from '../../idTech4/Doom3Map';
 import type { Doom3Brush } from '../../idTech4/Doom3Map';
@@ -27,12 +28,28 @@ const DOOR_SPECIALS = new Set([
 // Default open height for a door when original ceiling == floor
 const DEFAULT_DOOR_OPEN_HEIGHT = 128;
 
-const mapX = (x: number) => x * 1.5;
-const mapY = (y: number) => y * 1.5;
-const mapZ = (z: number) => z * 1.5;
+const COORD_SCALE = 1.5;
+const DEFAULT_WALL_SIZE = 128;
+
+const mapX = (x: number) => x * COORD_SCALE;
+const mapY = (y: number) => y * COORD_SCALE;
+const mapZ = (z: number) => z * COORD_SCALE;
+
+export interface DoorActionOptions {
+  texturePrefix?: string;
+  textureSizes?: TextureSizeMap;
+}
 
 export class DoorAction implements Action {
   name = 'DoorAction';
+
+  private texturePrefix: string;
+  private textureSizes: TextureSizeMap | undefined;
+
+  constructor(options: DoorActionOptions = {}) {
+    this.texturePrefix = options.texturePrefix ?? 'v2d3';
+    this.textureSizes = options.textureSizes;
+  }
 
   preprocess(map: MapParser): void {
     const linedefs = map.linedefs ?? [];
@@ -116,6 +133,11 @@ export class DoorAction implements Action {
     const height = ceiling - floor;
     if (height <= 0) return brushes;
 
+    // Find door texture from surrounding linedefs
+    const doorTexName = this.findDoorTexture(sector);
+    const doorTex = doorTexName ? `textures/${this.texturePrefix}/${doorTexName}` : undefined;
+    const scales = this.doorTextureScales(doorTexName);
+
     for (const subsector of subsectors) {
       if (subsector.sectorIndex === undefined) continue;
       if (sectors[subsector.sectorIndex] !== sector) continue;
@@ -128,6 +150,8 @@ export class DoorAction implements Action {
 
       const text = polygonSlabBrush(polygon, floor, height, {
         expandAmount: 0.5,
+        texture: doorTex,
+        ...scales,
         comment: `// Door brush (sector ${sector._id}, subsector ${subsector._id})`,
       });
       if (text) {
@@ -136,6 +160,60 @@ export class DoorAction implements Action {
     }
 
     return brushes;
+  }
+
+  /** Find a suitable texture for the door brush from surrounding linedefs.
+   *  Doors typically use the middle texture from sidedefs facing INTO the door sector. */
+  private findDoorTexture(sector: Sector): string | null {
+    const sectorLinedefs = sector.linedefs;
+    const sidedefs = sector.map.sidedefs ?? [];
+
+    // First pass: look for middle textures on sidedefs facing the door sector
+    for (const ld of sectorLinedefs) {
+      if (ld.sideback < 0) continue;
+
+      for (const sideIdx of [ld.sidefront, ld.sideback]) {
+        if (sideIdx < 0) continue;
+        const side = sidedefs[sideIdx];
+        if (!side || side.sector === sector._id) continue;
+
+        // Middle texture is the door face texture
+        const middle = side.texturemiddle.replace(/^"|"$/g, '').trim().toUpperCase();
+        if (middle && middle !== '-') {
+          console.log(`[DoorAction] Found door texture "${middle}" for sector ${sector._id}`);
+          return middle;
+        }
+      }
+    }
+
+    // Fallback: try upper textures (door tracks)
+    for (const ld of sectorLinedefs) {
+      if (ld.sideback < 0) continue;
+      for (const sideIdx of [ld.sidefront, ld.sideback]) {
+        if (sideIdx < 0) continue;
+        const side = sidedefs[sideIdx];
+        if (!side || side.sector === sector._id) continue;
+        const upper = side.texturetop.replace(/^"|"$/g, '').trim().toUpperCase();
+        if (upper && upper !== '-') {
+          console.log(`[DoorAction] Using upper texture "${upper}" as door texture for sector ${sector._id}`);
+          return upper;
+        }
+      }
+    }
+
+    console.warn(`[DoorAction] No door texture found for sector ${sector._id}`);
+    return null;
+  }
+
+  /** Compute UV scales for a door texture. */
+  private doorTextureScales(texName: string | null): { textureScaleS: number; textureScaleT: number } {
+    const dim = texName ? this.textureSizes?.get(texName) : undefined;
+    const w = dim?.width ?? DEFAULT_WALL_SIZE;
+    const h = dim?.height ?? DEFAULT_WALL_SIZE;
+    return {
+      textureScaleS: 1 / (w * COORD_SCALE),
+      textureScaleT: 1 / (h * COORD_SCALE),
+    };
   }
 
   private markAsDoor(sector: Sector, allSectors: Sector[]): void {

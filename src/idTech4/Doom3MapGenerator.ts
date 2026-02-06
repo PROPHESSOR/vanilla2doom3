@@ -60,22 +60,34 @@ const DEFAULT_FLAT_SIZE = 64;
 const DEFAULT_WALL_SIZE = 128;
 
 /**
- * Compute per-axis UV scale for a texture based on its pixel dimensions.
+ * Compute per-axis UV scale and offset for a texture.
  * Extracts the texture name from the full material path (textures/prefix/NAME).
+ * offsetx/offsety are Doom sidedef pixel offsets (0 for floors/ceilings).
  */
-function textureScales(
+function textureParams(
   materialPath: string | undefined,
   sizes: TextureSizeMap | undefined,
   defaultSize: number,
-): { textureScaleS: number; textureScaleT: number } {
+  offsetx = 0,
+  offsety = 0,
+): { textureScaleS: number; textureScaleT: number; textureOffsetS: number; textureOffsetT: number } {
   const texName = materialPath?.split('/').pop()?.toUpperCase();
   const dim = texName ? sizes?.get(texName) : undefined;
   const w = dim?.width ?? defaultSize;
   const h = dim?.height ?? defaultSize;
+  // Doom offsets are in pixels. Convert to texture repeats (0-1 range).
+  // The brushDef3 offset is in the same units as the scale, so we divide by texture size.
   return {
     textureScaleS: 1 / (w * COORD_SCALE),
     textureScaleT: 1 / (h * COORD_SCALE),
+    textureOffsetS: offsetx / w,
+    textureOffsetT: offsety / h,
   };
+}
+
+/** Check if a sector flat name is a sky texture (F_SKY1, SKY1, etc.). */
+function isSkyFlat(texName: string): boolean {
+  return texName.toUpperCase().replace(/^"|"$/g, '').includes('SKY');
 }
 
 export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): Doom3Map {
@@ -143,7 +155,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       {
         expandAmount: polygonExpansion,
         texture: floorTex,
-        ...textureScales(floorTex, texSizes, DEFAULT_FLAT_SIZE),
+        ...textureParams(floorTex, texSizes, DEFAULT_FLAT_SIZE),
         comment: `// Subsector ${subsector._id} floor (sector ${sectorIndex})`,
       }
     );
@@ -162,7 +174,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
       {
         expandAmount: polygonExpansion,
         texture: ceilTex,
-        ...textureScales(ceilTex, texSizes, DEFAULT_FLAT_SIZE),
+        ...textureParams(ceilTex, texSizes, DEFAULT_FLAT_SIZE),
         comment: `// Subsector ${subsector._id} ceiling (sector ${sectorIndex})`,
       }
     );
@@ -218,6 +230,10 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
 
       if (ceiling > floor) {
         const midTex = mapTexture(sidefront.texturemiddle, texturePrefix);
+        const params = textureParams(midTex, texSizes, DEFAULT_WALL_SIZE, sidefront.offsetx, sidefront.offsety);
+        if (sidefront.offsetx !== 0 || sidefront.offsety !== 0) {
+          console.log(`[Doom3MapGenerator] Linedef ${linedef._id}: offsets (${sidefront.offsetx}, ${sidefront.offsety}) → UV (${params.textureOffsetS}, ${params.textureOffsetT})`);
+        }
         const wallBrushText = verticalWallBrush(
           v1,
           v2,
@@ -226,7 +242,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           {
             width: wallWidth,
             texture: midTex,
-            ...textureScales(midTex, texSizes, DEFAULT_WALL_SIZE),
+            ...params,
             comment: `// Linedef ${linedef._id} one-sided wall`,
           }
         );
@@ -260,9 +276,8 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const maxFloor = Math.max(floor1, floor2);
 
         // Lower texture: from the side whose sector has the higher floor
-        const lowerTex = floor2 > floor1
-          ? mapTexture(sidefront.texturebottom, texturePrefix)
-          : mapTexture(sideback.texturebottom, texturePrefix);
+        const lowerSide = floor2 > floor1 ? sidefront : sideback;
+        const lowerTex = mapTexture(lowerSide.texturebottom, texturePrefix);
 
         const lowerWallBrushText = verticalWallBrush(
           v1,
@@ -272,7 +287,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           {
             width: wallWidth,
             texture: lowerTex,
-            ...textureScales(lowerTex, texSizes, DEFAULT_WALL_SIZE),
+            ...textureParams(lowerTex, texSizes, DEFAULT_WALL_SIZE, lowerSide.offsetx, lowerSide.offsety),
             comment: `// Linedef ${linedef._id} lower wall`,
           }
         );
@@ -290,9 +305,29 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const maxCeiling = Math.max(ceiling1, ceiling2);
 
         // Upper texture: from the side whose sector has the higher ceiling
-        const upperTex = ceiling2 < ceiling1
-          ? mapTexture(sidefront.texturetop, texturePrefix)
-          : mapTexture(sideback.texturetop, texturePrefix);
+        const upperSide = ceiling2 < ceiling1 ? sidefront : sideback;
+        let upperTex = mapTexture(upperSide.texturetop, texturePrefix);
+
+        // Fallback: if no upper texture and either sector has sky ceiling, use sky flat
+        if (!upperTex) {
+          const frontIsSky = isSkyFlat(sectorFront.textureceiling);
+          const backIsSky = isSkyFlat(sectorBack.textureceiling);
+          if (frontIsSky || backIsSky) {
+            const skySector = frontIsSky ? sectorFront : sectorBack;
+            upperTex = mapTexture(skySector.textureceiling, texturePrefix);
+            console.log(`[Doom3MapGenerator] Using sky texture "${skySector.textureceiling}" for upper wall (linedef ${linedef._id})`);
+          }
+        }
+
+        // Use offset 0 for sky textures (they don't need offsets)
+        const useSkyTex = !mapTexture(upperSide.texturetop, texturePrefix) && (isSkyFlat(sectorFront.textureceiling) || isSkyFlat(sectorBack.textureceiling));
+        const upperParams = textureParams(
+          upperTex,
+          texSizes,
+          DEFAULT_WALL_SIZE,
+          useSkyTex ? 0 : upperSide.offsetx,
+          useSkyTex ? 0 : upperSide.offsety
+        );
 
         const upperWallBrushText = verticalWallBrush(
           v1,
@@ -302,7 +337,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           {
             width: wallWidth,
             texture: upperTex,
-            ...textureScales(upperTex, texSizes, DEFAULT_WALL_SIZE),
+            ...upperParams,
             comment: `// Linedef ${linedef._id} upper wall`,
           }
         );

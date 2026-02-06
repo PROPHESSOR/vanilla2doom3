@@ -16,6 +16,10 @@ export interface BrushDef3Options {
   textureScaleS?: number;
   /** Vertical UV scale (repeats per world unit). */
   textureScaleT?: number;
+  /** Horizontal UV offset (in texture repeats). */
+  textureOffsetS?: number;
+  /** Vertical UV offset (in texture repeats). */
+  textureOffsetT?: number;
   comment?: string;
   indent?: number;
 }
@@ -26,11 +30,13 @@ function prettyNumber(x: number): number | string {
   return Math.round(x * 1000000) / 1000000;
 }
 
-function getPlaneString(plane: Plane, texture: string, scaleS: number, scaleT: number): string {
+function getPlaneString(plane: Plane, texture: string, scaleS: number, scaleT: number, offS: number, offT: number): string {
   const { nx, ny, nz, d } = plane;
   const ss = prettyNumber(scaleS);
   const st = prettyNumber(scaleT);
-  return `( ${prettyNumber(nx)} ${prettyNumber(ny)} ${prettyNumber(nz)} ${prettyNumber(d)} ) ( ( ${ss} 0 0 ) ( 0 ${st} 0 ) ) "${texture}" 0 0 0`;
+  const os = prettyNumber(offS);
+  const ot = prettyNumber(offT);
+  return `( ${prettyNumber(nx)} ${prettyNumber(ny)} ${prettyNumber(nz)} ${prettyNumber(d)} ) ( ( ${ss} 0 ${os} ) ( 0 ${st} ${ot} ) ) "${texture}" 0 0 0`;
 }
 
 /**
@@ -45,6 +51,8 @@ export function brushDef3(planes: Plane[], options: BrushDef3Options = {}): stri
   const texture = options.texture ?? DEFAULT_TEXTURE;
   const scaleS = options.textureScaleS ?? DEFAULT_TEXTURE_SCALE;
   const scaleT = options.textureScaleT ?? DEFAULT_TEXTURE_SCALE;
+  const offS = options.textureOffsetS ?? 0;
+  const offT = options.textureOffsetT ?? 0;
   const comment = options.comment ?? '// primitive';
   const indent = options.indent ?? 4;
   const indentStr = ' '.repeat(indent);
@@ -56,7 +64,7 @@ export function brushDef3(planes: Plane[], options: BrushDef3Options = {}): stri
   ];
 
   for (const plane of planes) {
-    lines.push('        ' + getPlaneString(plane, texture, scaleS, scaleT));
+    lines.push('        ' + getPlaneString(plane, texture, scaleS, scaleT, offS, offT));
   }
 
   lines.push('    }');

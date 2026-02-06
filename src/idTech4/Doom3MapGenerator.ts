@@ -15,7 +15,7 @@ export interface Doom3MapOptions {
   slabThickness?: number;
   /** Width of wall brushes (default: 8) */
   wallWidth?: number;
-  /** Expansion amount for subsector polygons to avoid gaps (default: 0.5) */
+  /** Expansion amount for subsector polygons to avoid gaps (default: 2.0) */
   polygonExpansion?: number;
   /** Add sealing box around level (default: true) */
   addSealingBox?: boolean;
@@ -104,7 +104,7 @@ function isSkyFlat(texName: string): boolean {
 export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}): Doom3Map {
   const slabThickness = options.slabThickness ?? 8;
   const wallWidth = options.wallWidth ?? 8;
-  const polygonExpansion = options.polygonExpansion ?? 0.5;
+  const polygonExpansion = options.polygonExpansion ?? 2.0;
   const addSealingBox = options.addSealingBox ?? true;
   const sealingMargin = options.sealingMargin ?? 256;
   const sealingWallThickness = options.sealingWallThickness ?? 64;

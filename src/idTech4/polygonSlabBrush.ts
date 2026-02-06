@@ -150,6 +150,8 @@ function planeKey(plane: Plane): string {
 }
 
 function expandPolygon(polygon: Vec2[], amount: number): Vec2[] {
+  if (polygon.length < 3) return polygon;
+
   // Calculate centroid
   const cx = polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length;
   const cy = polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length;

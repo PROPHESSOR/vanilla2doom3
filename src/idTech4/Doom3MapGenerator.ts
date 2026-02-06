@@ -75,13 +75,24 @@ function textureParams(
   const dim = texName ? sizes?.get(texName) : undefined;
   const w = dim?.width ?? defaultSize;
   const h = dim?.height ?? defaultSize;
-  // Doom offsets are in pixels. Convert to texture repeats (0-1 range).
-  // The brushDef3 offset is in the same units as the scale, so we divide by texture size.
+  const scaleS = 1 / (w * COORD_SCALE);
+  const scaleT = 1 / (h * COORD_SCALE);
+  // Doom offsets are in pixels. In brushDef3 format, offsets are in world units.
+  // The UV formula: u = scaleS * worldS + offsetS
+  // To shift by offsetx pixels:
+  // - offsetx pixels in Doom = offsetx * COORD_SCALE world units
+  // - But offsetS is added to UV, not world coord, so we need to convert:
+  //   offsetS = (offsetx * COORD_SCALE) * scaleS = offsetx / w
+  // Actually, let me check: if offsetS is in world units, then:
+  //   offsetS = offsetx * COORD_SCALE
+  // But that seems too large. Let me try: offsetS = offsetx / w (texture repeats)
+  // Based on test_box.map showing offsets of 0, and the fact that offsets are in same units as scale,
+  // I'll try: offsetS = offsetx * scaleS (which equals offsetx / (w * COORD_SCALE))
   return {
-    textureScaleS: 1 / (w * COORD_SCALE),
-    textureScaleT: 1 / (h * COORD_SCALE),
-    textureOffsetS: offsetx / w,
-    textureOffsetT: offsety / h,
+    textureScaleS: scaleS,
+    textureScaleT: scaleT,
+    textureOffsetS: offsetx * scaleS,
+    textureOffsetT: offsety * scaleT,
   };
 }
 

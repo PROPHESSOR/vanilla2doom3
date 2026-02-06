@@ -39,3 +39,4 @@ __screenshots__/
 *.timestamp-*-*.mjs
 
 old
+converted.map

@@ -113,11 +113,22 @@ export class DoorAction implements Action {
         },
         brushes,
       });
+
+      // Add visportal for rendering optimization
+      const portalBrushes = this.buildPortalBrushes(sector);
+      if (portalBrushes.length > 0) {
+        doom3Map.addEntity({
+          classname: 'func_portal',
+          properties: {},
+          brushes: portalBrushes,
+        });
+      }
+
       doorIndex++;
     }
 
     if (doorIndex > 0) {
-      console.log(`[DoorAction] Added ${doorIndex} func_door entities`);
+      console.log(`[DoorAction] Added ${doorIndex} func_door entities with visportals`);
     }
   }
 
@@ -230,10 +241,12 @@ export class DoorAction implements Action {
     }
   }
 
-  /** Find the ceiling height of a neighboring non-door sector to use as open height. */
+  /** Find the ceiling height of a neighboring non-door sector to use as open height.
+   *  Returns the MINIMUM ceiling from all neighbors to avoid exceeding room height. */
   private findNeighborCeiling(doorSector: Sector, allSectors: Sector[]): number | null {
     const sectorLinedefs = doorSector.linedefs;
     const sidedefs = doorSector.map.sidedefs ?? [];
+    let minCeiling: number | null = null;
 
     for (const ld of sectorLinedefs) {
       if (ld.sideback < 0) continue;
@@ -246,11 +259,53 @@ export class DoorAction implements Action {
         if (!side || side.sector === doorSector._id) continue;
         const neighbor = allSectors[side.sector];
         if (neighbor && !neighbor.metadata.isDoor) {
-          return neighbor.heightceiling;
+          if (minCeiling === null || neighbor.heightceiling < minCeiling) {
+            minCeiling = neighbor.heightceiling;
+          }
         }
       }
     }
 
-    return null;
+    return minCeiling;
+  }
+
+  /** Build thin portal brushes for the door opening (for rendering optimization). */
+  private buildPortalBrushes(sector: Sector): Doom3Brush[] {
+    const map = sector.map;
+    const subsectors = map.subsectors ?? [];
+    const sectors = map.sectors ?? [];
+    const brushes: Doom3Brush[] = [];
+
+    const floor = mapZ(sector.heightfloor);
+    const ceiling = mapZ(sector.heightceiling);
+    const height = ceiling - floor;
+    if (height <= 0) return brushes;
+
+    // Create a very thin vertical brush (1 unit thick) for the portal
+    const portalThickness = 1;
+
+    for (const subsector of subsectors) {
+      if (subsector.sectorIndex === undefined) continue;
+      if (sectors[subsector.sectorIndex] !== sector) continue;
+
+      const polygon = subsector.getPolygonPoints().map((p) => ({
+        x: mapX(p.x),
+        y: mapY(p.y),
+      }));
+      if (polygon.length < 3) continue;
+
+      const text = polygonSlabBrush(polygon, floor, height, {
+        expandAmount: 0,
+        texture: 'textures/editor/visportal',
+        textureScaleS: 1,
+        textureScaleT: 1,
+        comment: `// Portal brush (sector ${sector._id}, subsector ${subsector._id})`,
+      });
+      if (text) {
+        brushes.push({ text, sourceSector: sector });
+      }
+    }
+
+    return brushes;
   }
 }

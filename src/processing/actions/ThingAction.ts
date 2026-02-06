@@ -15,7 +15,7 @@ interface ThingMapping {
 }
 
 // Comprehensive mapping of Doom thing types to Doom 3 entities
-const THING_MAPPINGS: Record<number, ThingMapping> = {
+const THING_MAPPINGS: Record<number, ThingMapping | ThingMapping[]> = {
   // ========== Player Starts ==========
   1: { classname: 'info_player_start' },
   2: { classname: 'info_player_deathmatch' },
@@ -30,37 +30,37 @@ const THING_MAPPINGS: Record<number, ThingMapping> = {
 
   // ========== Weapons ==========
   2001: { classname: 'weapon_shotgun' },
-  2002: { classname: 'weapon_chaingun' },
+  2002: { classname: 'weapon_machinegun' },
   2003: { classname: 'weapon_rocketlauncher' },
   2004: { classname: 'weapon_plasmagun' },
   2005: { classname: 'weapon_chainsaw' },
   2006: { classname: 'weapon_bfg' },
 
   // ========== Ammunition ==========
-  2007: { classname: 'item_clip_small' }, // Clip
-  2008: { classname: 'item_shells_small' }, // 4 shotgun shells
-  2010: { classname: 'item_rockets_small' }, // Rocket
-  2046: { classname: 'item_clip_box' }, // Box of bullets
-  2047: { classname: 'item_cells_small' }, // Cell pack
-  2048: { classname: 'item_shells_large' }, // Box of shells
-  2049: { classname: 'item_clip_large' }, // Box of ammo
+  2007: [{ classname: 'ammo_clips_small' }, { classname: 'ammo_bullets_small' }], // Clip
+  2008: { classname: 'ammo_shells_small' }, // 4 shotgun shells
+  2010: { classname: 'ammo_rockets_small' }, // Rocket
+  2046: [{ classname: 'ammo_clips_large' }, { classname: 'ammo_bullets_large' }], // Box of bullets
+  2047: { classname: 'ammo_cells_small' }, // Cell pack
+  2048: { classname: 'ammo_shells_large' }, // Box of shells
+  2049: { classname: 'ammo_clips_large' }, // Box of ammo
 
   // ========== Health & Armor ==========
-  2011: { classname: 'item_health_small' }, // Stimpack
-  2012: { classname: 'item_health' }, // Medikit
-  2013: { classname: 'item_health_mega' }, // Soulsphere
-  2014: { classname: 'item_health_large' }, // Health bonus (+1)
-  2015: { classname: 'item_health_mega' }, // Invulnerability (placeholder)
+  2011: { classname: 'item_medkit_small' }, // Stimpack
+  2012: { classname: 'item_medkit' }, // Medikit
+  2013: { classname: 'powerup_megahealth' }, // Soulsphere
+  2014: { classname: 'powerup_adrenaline' }, // Health bonus (+1)
+  2015: { classname: 'powerup_megahealth' }, // Invulnerability (placeholder)
   2018: { classname: 'item_armor_small' }, // Green armor
   2019: { classname: 'item_armor_large' }, // Blue armor
   2045: { classname: 'item_armor_security' }, // Bonus armor
 
   // ========== Powerups ==========
   2022: { classname: 'item_envirosuit' }, // Invulnerability (mapped to enviro suit)
-  2023: { classname: 'item_berserk' }, // Berserk
-  2024: { classname: 'item_envirosuit' }, // Blur sphere (invis, mapped to enviro)
+  2023: { classname: 'powerup_berserk' }, // Berserk
+  2024: { classname: 'powerup_invisibility' }, // Blur sphere (invis, mapped to enviro)
   2025: { classname: 'item_envirosuit' }, // Radiation suit
-  2026: { classname: 'item_health_mega' }, // Computer map (placeholder)
+  2026: { classname: 'item_pda' }, // Computer map (placeholder)
 
   // ========== Monsters - Former Humans ==========
   3004: { classname: 'monster_zsec_pistol', zOffset: 0 }, // Zombieman
@@ -73,8 +73,8 @@ const THING_MAPPINGS: Record<number, ThingMapping> = {
   3003: { classname: 'monster_demon_hellknight', zOffset: 0 }, // Baron of Hell
   3005: { classname: 'monster_flying_cacodemon', zOffset: 0 }, // Cacodemon
   3006: { classname: 'monster_flying_lostsoul', zOffset: 0 }, // Lost Soul
-  16: { classname: 'monster_demon_revenant', zOffset: 0 }, // Cyberdemon (mapped to revenant)
-  7: { classname: 'monster_demon_mancubus', zOffset: 0 }, // Spider Mastermind (mapped to mancubus)
+  16: { classname: 'monster_boss_cyberdemon', zOffset: 0 }, // Cyberdemon
+  7: { classname: 'monster_boss_vagary', zOffset: 0 }, // Spider Mastermind (mapped to vagary)
 
   // ========== Monsters - Mid Tier ==========
   65: { classname: 'monster_zombie_chainsaw', zOffset: 0 }, // Chaingunner
@@ -144,24 +144,29 @@ export class ThingAction implements Action {
 
       // Find the floor height at this thing's location
       const floorHeight = this.findFloorHeightAt(thing.x, thing.y, sectors);
-      const zOffset = mapping.zOffset ?? 0;
-      const z = mapZ(floorHeight) + zOffset;
 
       // Convert Doom angle (0=east, 90=north) to Doom 3 angle (0=east, 90=north, CCW)
       const angle = this.convertAngle(thing.angle);
 
-      const entity = {
-        classname: mapping.classname,
-        properties: {
-          name: `${mapping.classname}_${thing._id}`,
-          origin: `${mapX(thing.x)} ${mapY(thing.y)} ${z}`,
-          angle: angle.toString(),
-          ...(mapping.properties ?? {}),
-        },
-        brushes: [],
-      };
+      const mappings = Array.isArray(mapping) ? mapping : [mapping];
 
-      doom3Map.addEntity(entity);
+      for (const mapping of mappings) {
+        const zOffset = mapping.zOffset ?? 0;
+        const z = mapZ(floorHeight) + zOffset;
+
+        const entity = {
+          classname: mapping.classname,
+          properties: {
+            name: `${mapping.classname}_${thing._id}`,
+            origin: `${mapX(thing.x)} ${mapY(thing.y)} ${z}`,
+            angle: angle.toString(),
+            ...(mapping.properties ?? {}),
+          },
+          brushes: [],
+        };
+
+        doom3Map.addEntity(entity);
+      }
       convertedCount++;
     }
 

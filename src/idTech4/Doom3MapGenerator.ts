@@ -110,6 +110,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
   const sealingWallThickness = options.sealingWallThickness ?? 64;
   const texturePrefix = options.texturePrefix ?? 'v2d3';
   const texSizes = options.textureSizes;
+  const wallsToFlatsOffset = 0.1; // Small offset to prevent z-fighting between walls and floor/ceiling slabs
 
   const doom3Map = new Doom3Map();
   const bounds: Bounds = {
@@ -294,7 +295,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
           v1,
           v2,
           minFloor,
-          maxFloor,
+          maxFloor - wallsToFlatsOffset,
           {
             width: wallWidth,
             texture: lowerTex,
@@ -343,7 +344,7 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
         const upperWallBrushText = verticalWallBrush(
           v1,
           v2,
-          minCeiling,
+          minCeiling + wallsToFlatsOffset,
           maxCeiling,
           {
             width: wallWidth,

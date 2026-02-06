@@ -9,6 +9,7 @@ import { polygonSlabBrush } from './polygonSlabBrush';
 import { verticalWallBrush } from './verticalWallBrush';
 import { rectBrush3d } from './rectBrush3d';
 import { Doom3Map, type Doom3Brush } from './Doom3Map';
+import { COORD_SCALE, DEFAULT_FLAT_SIZE, DEFAULT_WALL_SIZE, mapX, mapY, mapZ } from '../constants';
 
 export interface Doom3MapOptions {
   /** Thickness of floor/ceiling slabs (default: 8) */
@@ -38,10 +39,6 @@ interface Bounds {
   maxZ: number;
 }
 
-const mapX = (x: number) => x * 1.5;
-const mapY = (y: number) => y * 1.5;
-const mapZ = (z: number) => z * 1.5;
-
 /**
  * Convert a Doom texture name to a Doom 3 material path.
  * Strips surrounding quotes (sidedefs store names as `"NAME"`).
@@ -52,12 +49,6 @@ function mapTexture(raw: string, prefix: string): string | undefined {
   if (!name || name === '-') return undefined;
   return `textures/${prefix}/${name}`;
 }
-
-// Texture UV scales: 1 texel = 1 Doom unit = 1.5 world units (mapX/Y/Z scale).
-// scale = 1 / (texture_pixels * coordinate_scale)
-const COORD_SCALE = 1.5;
-const DEFAULT_FLAT_SIZE = 64;
-const DEFAULT_WALL_SIZE = 128;
 
 /**
  * Compute per-axis UV scale and offset for a texture.

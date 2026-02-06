@@ -4,3 +4,4 @@
 // https://opensource.org/licenses/MIT
 
 export { DoorAction } from './DoorAction';
+export { ThingAction } from './ThingAction';

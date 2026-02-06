@@ -5,3 +5,4 @@
 
 export type { Action } from './Action';
 export { MapProcessor } from './MapProcessor';
+export * from './actions';

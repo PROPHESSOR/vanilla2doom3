@@ -10,6 +10,7 @@ import type { Doom3Map } from '../../idTech4/Doom3Map';
 import type { Doom3Brush } from '../../idTech4/Doom3Map';
 import { polygonSlabBrush } from '../../idTech4/polygonSlabBrush';
 import type { Action } from '../Action';
+import { COORD_SCALE, DEFAULT_WALL_SIZE, mapX, mapY, mapZ } from '../../constants';
 
 // Classic Doom linedef specials that represent door actions
 const DOOR_SPECIALS = new Set([
@@ -27,13 +28,6 @@ const DOOR_SPECIALS = new Set([
 
 // Default open height for a door when original ceiling == floor
 const DEFAULT_DOOR_OPEN_HEIGHT = 128;
-
-const COORD_SCALE = 1.5;
-const DEFAULT_WALL_SIZE = 128;
-
-const mapX = (x: number) => x * COORD_SCALE;
-const mapY = (y: number) => y * COORD_SCALE;
-const mapZ = (z: number) => z * COORD_SCALE;
 
 export interface DoorActionOptions {
   texturePrefix?: string;

@@ -5,7 +5,7 @@ import { MapParser, type StoredMap } from './idTech1/MapParser';
 import { readFileToByteTools } from './idTech1/utils/BrowserFile';
 import { parseTextureSizes } from './idTech1/TextureSizes';
 import { generateDoom3Map } from './idTech4';
-import { MapProcessor, DoorAction, ThingAction } from './processing';
+import { MapProcessor, DoorAction, ThingAction, SoundBlockAction } from './processing';
 
 const LAST_MAP_KEY = 'vanilla2doom3-last-map';
 
@@ -258,7 +258,8 @@ function exportDoom3Map() {
 
     const processor = new MapProcessor([
       new DoorAction({ textureSizes }),
-      new ThingAction({ includeMonsters: true, includeItems: true, includeDecorations: true })
+      new ThingAction({ includeMonsters: true, includeItems: true, includeDecorations: true }),
+      new SoundBlockAction()
     ]);
     processor.preprocess(rawMap);
 

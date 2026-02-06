@@ -108,12 +108,14 @@ export class DoorAction implements Action {
         brushes,
       });
 
-      // Add visportal for rendering optimization
+      // Add visportal for rendering optimization and sound blocking
       const portalBrushes = this.buildPortalBrushes(sector);
       if (portalBrushes.length > 0) {
         doom3Map.addEntity({
           classname: 'func_portal',
-          properties: {},
+          properties: {
+            nosound: '1',
+          },
           brushes: portalBrushes,
         });
       }
@@ -122,7 +124,7 @@ export class DoorAction implements Action {
     }
 
     if (doorIndex > 0) {
-      console.log(`[DoorAction] Added ${doorIndex} func_door entities with visportals`);
+      console.log(`[DoorAction] Added ${doorIndex} func_door entities with sound-blocking visportals`);
     }
   }
 

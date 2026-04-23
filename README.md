@@ -1,6 +1,6 @@
 # vanilla2doom3
 
-`vanilla2doom3` is a browser-based converter for classic Doom WAD maps. It reads Doom/Heretic-era id Tech 1 map data from a WAD, previews the parsed map geometry, and exports a Doom 3 `Version 2` `.map` file made from `brushDef3` world geometry and entities.
+`vanilla2doom3` is a browser-based converter for classic Doom WAD maps. It reads Doom 1-2-era id Tech 1 map data from a WAD, previews the parsed map geometry, and exports a Doom 3 `Version 2` `.map` file made from `brushDef3` world geometry and entities.
 
 The project is a Vue 3 + Vite application written in TypeScript. WAD parsing and map generation run locally in the browser; the selected WAD files are not uploaded anywhere.
 
@@ -25,24 +25,24 @@ The exporter also adds a sealing box around the generated level to help produce 
 This is a practical converter, not a full compatibility layer for Doom gameplay.
 
 - It exports Doom 3 editor map geometry, not a finished `.pk4`.
-- It does not include copyrighted WAD data, Doom textures, or Doom 3 assets.
+- It does not include copyrighted WAD data, Doom textures, or Doom 3 assets. You need to generate base pk4 from IWAD manually.
 - Thing conversion is mapping-based and incomplete; unsupported thing types are skipped.
 - Doom linedef specials are only partially interpreted. Doors and sound blockers have explicit support.
 - Sector effects, animated textures, triggers, lifts, switches, teleports, monster behavior parity, and full gameplay scripting are outside the current conversion scope.
-- Generated maps usually need inspection and cleanup in DoomEdit or another Doom 3 map workflow.
+- Dynamic lights placement is in very early stage.
 
 ## Web App Usage
 
 Install dependencies:
 
 ```sh
-yarn
+deno install
 ```
 
 Start the development server:
 
 ```sh
-yarn dev
+deno task dev
 ```
 
 In the app:
@@ -92,25 +92,25 @@ Copy or package those generated files according to your Doom 3 mod workflow. The
 ## Development Commands
 
 ```sh
-yarn dev
+deno task dev
 ```
 
 Run Vite for local development.
 
 ```sh
-yarn build
+deno task build
 ```
 
 Type-check and build the production app.
 
 ```sh
-yarn lint
+deno task lint
 ```
 
 Run oxlint and ESLint with automatic fixes.
 
 ```sh
-yarn format
+deno task format
 ```
 
 Format files under `src/` with Prettier.
@@ -118,8 +118,7 @@ Format files under `src/` with Prettier.
 ## Requirements
 
 - Node.js `^20.19.0` or `>=22.12.0`
-- Yarn
-- Deno, only for the `resourcepack/` extraction utility
+- Deno, (especially for the `resourcepack/` extraction utility)
 
 ## Attribution
 

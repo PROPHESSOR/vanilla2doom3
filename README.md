@@ -1,6 +1,8 @@
 # vanilla2doom3
 
-<a href="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e"><img width="480" alt="UI screenshot" src="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e" /></a><br/>
+<a href="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e">
+<img width="480" alt="Vanilla2Doom3 UI" src="https://github.com/user-attachments/assets/653f48ba-9229-4aa9-a2c9-10cdb74923ed" />
+</a><br/>
 
 <a href="https://github.com/user-attachments/assets/cbdcb305-82c8-4280-ae6a-d668a9848711"><img width="480" alt="Converted game map example" src="https://github.com/user-attachments/assets/cbdcb305-82c8-4280-ae6a-d668a9848711" /></a>
 <a href="https://github.com/user-attachments/assets/254fcdf4-6df4-4abc-a1f1-71de1d60420b"><img width="480" alt="Converted game map example" src="https://github.com/user-attachments/assets/254fcdf4-6df4-4abc-a1f1-71de1d60420b" /></a>

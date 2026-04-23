@@ -1,9 +1,9 @@
 # vanilla2doom3
 
-<img width="480" alt="UI screenshot" src="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e" /><br/>
+<a href="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e"><img width="480" alt="UI screenshot" src="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e" /></a><br/>
 
-<img width="480" alt="Converted game map example" src="https://github.com/user-attachments/assets/cbdcb305-82c8-4280-ae6a-d668a9848711" />
-<img width="480" alt="Converted game map example" src="https://github.com/user-attachments/assets/254fcdf4-6df4-4abc-a1f1-71de1d60420b" />
+<a href="https://github.com/user-attachments/assets/cbdcb305-82c8-4280-ae6a-d668a9848711"><img width="480" alt="Converted game map example" src="https://github.com/user-attachments/assets/cbdcb305-82c8-4280-ae6a-d668a9848711" /></a>
+<a href="https://github.com/user-attachments/assets/254fcdf4-6df4-4abc-a1f1-71de1d60420b"><img width="480" alt="Converted game map example" src="https://github.com/user-attachments/assets/254fcdf4-6df4-4abc-a1f1-71de1d60420b" /></a>
 
 
 

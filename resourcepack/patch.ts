@@ -35,7 +35,7 @@ export function decodePatch(buf: ByteTools): DecodedPatch {
   pixels.fill(TRANSPARENT);
 
   for (let col = 0; col < width; col++) {
-    buf.seek(columnOffsets[col], 'START');
+    buf.seek(columnOffsets[col]!, 'START');
 
     let prevDelta = -1;
 

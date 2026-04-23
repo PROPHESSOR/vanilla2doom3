@@ -1,6 +1,10 @@
 import { TRANSPARENT, type ImageBuffer } from './types.ts';
 import { paletteRGB, type Palette } from './palette.ts';
 
+declare const Deno: {
+  writeFile(path: string, data: Uint8Array): Promise<void>;
+};
+
 /**
  * Encode an indexed-color ImageBuffer into an uncompressed 24-bit TGA (type 2).
  * No alpha channel — fully opaque. Use for the majority of textures.
@@ -26,7 +30,7 @@ function encodeTga24(image: ImageBuffer, palette: Palette): Uint8Array {
   let offset = HEADER_SIZE;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const idx = pixels[y * width + x];
+      const idx = pixels[y * width + x]!;
       if (idx === TRANSPARENT || idx >= 256) {
         tga[offset++] = 0;
         tga[offset++] = 0;
@@ -68,7 +72,7 @@ function encodeTga32(image: ImageBuffer, palette: Palette): Uint8Array {
   let offset = HEADER_SIZE;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const idx = pixels[y * width + x];
+      const idx = pixels[y * width + x]!;
       if (idx === TRANSPARENT || idx >= 256) {
         tga[offset++] = 255; // B (magenta fallback)
         tga[offset++] = 0; // G
@@ -86,6 +90,16 @@ function encodeTga32(image: ImageBuffer, palette: Palette): Uint8Array {
   return tga;
 }
 
+/** Encode a TGA file.
+ *  Set `alpha` to true only for textures that contain transparent pixels. */
+export function encodeTga(
+  image: ImageBuffer,
+  palette: Palette,
+  alpha = false,
+): Uint8Array {
+  return alpha ? encodeTga32(image, palette) : encodeTga24(image, palette);
+}
+
 /** Encode and write a TGA file to disk.
  *  Set `alpha` to true only for textures that contain transparent pixels. */
 export async function writeTga(
@@ -94,6 +108,6 @@ export async function writeTga(
   palette: Palette,
   alpha = false,
 ): Promise<void> {
-  const data = alpha ? encodeTga32(image, palette) : encodeTga24(image, palette);
+  const data = encodeTga(image, palette, alpha);
   await Deno.writeFile(path, data);
 }

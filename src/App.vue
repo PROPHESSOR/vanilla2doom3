@@ -6,6 +6,7 @@ import { readFileToByteTools } from './idTech1/utils/BrowserFile';
 import { parseTextureSizes } from './idTech1/TextureSizes';
 import { generateDoom3Map } from './idTech4';
 import { MapProcessor, DoorAction, ThingAction, SoundBlockAction, LightingAction } from './processing';
+import { generateResourcepackPk4 } from '../resourcepack/generate.ts';
 
 const LAST_MAP_KEY = 'vanilla2doom3-last-map';
 
@@ -26,6 +27,7 @@ const mapParser = ref<MapParser | null>(null);
 const maps = ref<MapChoice[]>([]);
 const error = ref<string | null>(null);
 const loading = ref(false);
+const resourcepackGenerating = ref(false);
 const hoveredSubsectorIndex = ref<number | null>(null);
 const tooltipPos = ref({ x: 0, y: 0 });
 
@@ -36,6 +38,14 @@ const tooltipPos = ref({ x: 0, y: 0 });
 const canLoad = computed(() => !!mapWadFile.value && !loading.value);
 const mapWadFileName = computed(() => mapWadFile.value?.name ?? '');
 const baseIwadFileName = computed(() => baseIwadFile.value?.name ?? '');
+const resourcepackSourceFile = computed(() => {
+  if (!mapParser.value) return null;
+  if (!useCurrentWadAsIwad.value && baseIwadFile.value) return baseIwadFile.value;
+  return mapWadFile.value;
+});
+const canGenerateResourcepack = computed(
+  () => !!resourcepackSourceFile.value && !resourcepackGenerating.value,
+);
 
 function onMapWadSelected(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -119,6 +129,26 @@ function loadLastMap() {
       /* ignore */
     }
   }
+}
+
+function downloadFile(data: BlobPart[], type: string, filename: string) {
+  const blob = new Blob(data, { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function fileBaseName(file: File): string {
+  return file.name.replace(/\.[^/.]+$/, '') || 'resourcepack';
+}
+
+function uint8ArrayBuffer(data: Uint8Array): ArrayBuffer {
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
 const hasLastMap = (() => {
@@ -277,21 +307,37 @@ function exportDoom3Map() {
 
     const mapContent = doom3Map.export();
 
-    // Create download
-    const blob = new Blob([mapContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'converted.map';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadFile([mapContent], 'text/plain', 'converted.map');
 
     console.log('Doom 3 .map file exported successfully');
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to generate .map file';
     console.error('Export failed:', e);
+  }
+}
+
+async function exportResourcepack() {
+  const sourceFile = resourcepackSourceFile.value;
+  if (!sourceFile) return;
+
+  error.value = null;
+  resourcepackGenerating.value = true;
+
+  try {
+    const wadData = await sourceFile.arrayBuffer();
+    const result = generateResourcepackPk4(wadData, 'v2d3');
+    const filename = `${fileBaseName(sourceFile)}-v2d3-resourcepack.pk4`;
+    downloadFile([uint8ArrayBuffer(result.data)], 'application/zip', filename);
+
+    console.log(
+      `Resourcepack exported successfully: ${result.textureCount} wall textures, ` +
+      `${result.flatCount} flats, ${result.transparentCount} with alpha`,
+    );
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to generate resourcepack';
+    console.error('Resourcepack export failed:', e);
+  } finally {
+    resourcepackGenerating.value = false;
   }
 }
 
@@ -353,6 +399,14 @@ const VERTEX_CIRCLE_R = 5;
       <div class="actions">
         <button type="button" class="btn-export" @click="exportDoom3Map">
           Export Doom 3 .map
+        </button>
+        <button
+          type="button"
+          class="btn-resourcepack"
+          :disabled="!canGenerateResourcepack"
+          @click="exportResourcepack"
+        >
+          {{ resourcepackGenerating ? 'Generating resourcepack…' : 'Generate resourcepack for this IWAD' }}
         </button>
       </div>
       <div class="map-view" @mousemove="onMapViewMouseMove">
@@ -544,11 +598,14 @@ h2 {
 
 .actions {
   margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
-.btn-export {
+.btn-export,
+.btn-resourcepack {
   padding: 0.6rem 1.2rem;
-  background: #2196f3;
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -557,12 +614,33 @@ h2 {
   font-weight: 500;
 }
 
+.btn-export {
+  background: #2196f3;
+}
+
 .btn-export:hover {
   background: #1976d2;
 }
 
 .btn-export:active {
   background: #0d47a1;
+}
+
+.btn-resourcepack {
+  background: #8e5a00;
+}
+
+.btn-resourcepack:hover:not(:disabled) {
+  background: #a66d00;
+}
+
+.btn-resourcepack:active:not(:disabled) {
+  background: #704600;
+}
+
+.btn-resourcepack:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .map-view {

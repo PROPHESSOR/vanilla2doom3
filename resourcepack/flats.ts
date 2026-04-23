@@ -39,6 +39,7 @@ export function extractFlats(wad: WadFile): FlatImage[] {
   for (const [startIdx, endIdx] of ranges) {
     for (let i = startIdx + 1; i < endIdx; i++) {
       const lump = wad.lumps[i];
+      if (!lump) continue;
       if (lump.size !== 4096) continue;
 
       const name = lump.name.toUpperCase();
@@ -48,7 +49,7 @@ export function extractFlats(wad: WadFile): FlatImage[] {
       const raw = new Uint8Array(wadAB.slice(lump.pos, lump.pos + 4096));
       const pixels = new Uint16Array(4096);
       for (let j = 0; j < 4096; j++) {
-        pixels[j] = raw[j];
+        pixels[j] = raw[j]!;
       }
 
       flats.push({ name, image: { width: 64, height: 64, pixels } });

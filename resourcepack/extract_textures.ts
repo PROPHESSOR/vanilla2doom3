@@ -2,7 +2,7 @@
 
 import { join } from 'node:path';
 
-import { loadWad } from './wad.ts';
+import { parseWadData } from './wad.ts';
 import { parsePalette } from './palette.ts';
 import { parsePnames, parseTextureDefs } from './texture_defs.ts';
 import { PatchCache } from './patch.ts';
@@ -57,7 +57,7 @@ async function main() {
 
   // 1. Load WAD
   console.log(`Loading WAD: ${wadPath}`);
-  const wad = await loadWad(wadPath);
+  const wad = parseWadData(await Deno.readFile(wadPath));
 
   // 2. Palette
   const palette = parsePalette(wad);

@@ -22,5 +22,5 @@ export function paletteRGB(
   index: number,
 ): [r: number, g: number, b: number] {
   const off = index * 3;
-  return [palette[off], palette[off + 1], palette[off + 2]];
+  return [palette[off]!, palette[off + 1]!, palette[off + 2]!];
 }

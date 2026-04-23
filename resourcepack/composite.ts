@@ -35,7 +35,7 @@ export function compositeTexture(
         const destX = tp.originX + px;
         if (destX < 0 || destX >= width) continue;
 
-        const srcPixel = patch.pixels[py * patch.width + px];
+        const srcPixel = patch.pixels[py * patch.width + px]!;
         if (srcPixel === TRANSPARENT) continue;
 
         pixels[destY * width + destX] = srcPixel;

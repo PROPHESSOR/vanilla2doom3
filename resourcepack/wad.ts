@@ -15,10 +15,11 @@ export interface WadFile {
   buffer: ByteTools;
 }
 
-/** Read and parse a WAD file from disk. */
-export async function loadWad(path: string): Promise<WadFile> {
-  const raw = await Deno.readFile(path);
-  const ab = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+/** Parse a WAD file from raw bytes. */
+export function parseWadData(data: ArrayBuffer | Uint8Array): WadFile {
+  const ab = data instanceof Uint8Array
+    ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+    : data;
   const buffer = new ByteTools(new DataView(ab));
 
   const type = buffer.readString(4);

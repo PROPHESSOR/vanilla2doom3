@@ -1,6 +1,6 @@
 # vanilla2doom3
 
-<a href="https://github.com/user-attachments/assets/9185f5f4-e8b5-47c7-a59f-6a9a0d53893e">
+<a href="https://github.com/user-attachments/assets/653f48ba-9229-4aa9-a2c9-10cdb74923ed">
 <img width="480" alt="Vanilla2Doom3 UI" src="https://github.com/user-attachments/assets/653f48ba-9229-4aa9-a2c9-10cdb74923ed" />
 </a><br/>
 

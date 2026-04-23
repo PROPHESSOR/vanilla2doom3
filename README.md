@@ -52,6 +52,8 @@ Start the development server:
 deno task dev
 ```
 
+And go to `http://localhost:3666`
+
 In the app:
 
 1. Select a map WAD.

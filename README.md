@@ -67,9 +67,68 @@ In the app:
 
 The app stores the last parsed map snapshot in `localStorage` so it can be reloaded without reselecting the WAD.
 
-## Texture And Material Extraction
+## Generated Files In Doom 3
 
-The browser exporter references Doom 3 material names, but it does not extract texture images. The `resourcepack/` directory contains a Deno utility that extracts wall textures and flats from a WAD as TGA files and writes a Doom 3 material file.
+After loading a WAD and choosing a map, the web app can download two files:
+
+- `converted.map` - the generated Doom 3 editor map.
+- `*-v2d3-resourcepack.pk4` - a Doom 3 resource pack containing extracted WAD textures, flats, and material definitions.
+
+Put both files in the same Doom 3 game folder. For quick local testing, you can use Doom 3's `base` folder:
+
+```text
+Doom 3/
+  base/
+    maps/
+      converted.map
+    your-wad-v2d3-resourcepack.pk4
+```
+
+For a cleaner setup, create a mod folder instead and keep both files there:
+
+```text
+Doom 3/
+  vanilla2doom3/
+    maps/
+      converted.map
+    your-wad-v2d3-resourcepack.pk4
+```
+
+The `.map` file must be inside a `maps/` directory. The `.pk4` file goes at the root of the active game folder, next to that `maps/` directory. A `.pk4` is a ZIP-format archive, but Doom 3 expects the `.pk4` extension.
+
+Start Doom 3 (or Dhewm3) with the folder that contains the files.
+
+If you used a mod folder, launch Doom 3 with:
+
+```sh
+doom3 +set fs_game vanilla2doom3
+```
+
+Open the Doom 3 console with `Ctrl+Alt+~`, then compile the map:
+
+```text
+dmap maps/converted.map
+```
+
+After `dmap` finishes, run the compiled map:
+
+```text
+map maps/converted.map
+```
+
+If you rename `converted.map`, use the same path in both console commands.
+
+If `dmap` stops with a `*** leaked ***` error, the generated map has geometry that Doom 3 considers open to the void. This might happen with converted maps even though the exporter adds a sealing box. For quick testing, compile with the no-flood option:
+
+```text
+dmap noFlood maps/converted.map
+```
+
+`noFlood` skips the leak/flood-fill check, so treat it as a workaround for previewing the generated map, not as a final optimization path. A properly sealed map should compile with plain `dmap`.
+
+## Texture And Material Extraction CLI
+
+The web app now generates the resourcepack `.pk4` directly. The `resourcepack/` directory still contains a Deno utility for manual texture/material extraction when you want loose files instead of a packaged `.pk4`.
 
 Run it with Deno:
 
@@ -88,8 +147,6 @@ output/
     v2d3/
       *.tga
 ```
-
-Copy or package those generated files according to your Doom 3 mod workflow. The `--prefix` value should match the texture prefix used by the map exporter; the default is `v2d3`.
 
 ## Project Layout
 

@@ -104,16 +104,22 @@ If you used a mod folder, launch Doom 3 with:
 doom3 +set fs_game vanilla2doom3
 ```
 
+If you just put it in the base/ folder, launch the game with:
+
+```sh
+doom3
+```
+
 Open the Doom 3 console with `Ctrl+Alt+~`, then compile the map:
 
 ```text
-dmap maps/converted.map
+dmap converted.map
 ```
 
 After `dmap` finishes, run the compiled map:
 
 ```text
-map maps/converted.map
+map converted.map
 ```
 
 If you rename `converted.map`, use the same path in both console commands.
@@ -121,7 +127,7 @@ If you rename `converted.map`, use the same path in both console commands.
 If `dmap` stops with a `*** leaked ***` error, the generated map has geometry that Doom 3 considers open to the void. This might happen with converted maps even though the exporter adds a sealing box. For quick testing, compile with the no-flood option:
 
 ```text
-dmap noFlood maps/converted.map
+dmap noFlood converted.map
 ```
 
 `noFlood` skips the leak/flood-fill check, so treat it as a workaround for previewing the generated map, not as a final optimization path. A properly sealed map should compile with plain `dmap`.

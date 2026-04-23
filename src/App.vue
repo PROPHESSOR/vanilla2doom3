@@ -5,7 +5,7 @@ import { MapParser, type StoredMap } from './idTech1/MapParser';
 import { readFileToByteTools } from './idTech1/utils/BrowserFile';
 import { parseTextureSizes } from './idTech1/TextureSizes';
 import { generateDoom3Map } from './idTech4';
-import { MapProcessor, DoorAction, ThingAction, SoundBlockAction } from './processing';
+import { MapProcessor, DoorAction, ThingAction, SoundBlockAction, LightingAction } from './processing';
 
 const LAST_MAP_KEY = 'vanilla2doom3-last-map';
 
@@ -259,7 +259,16 @@ function exportDoom3Map() {
     const processor = new MapProcessor([
       new DoorAction({ textureSizes }),
       new ThingAction({ includeMonsters: true, includeItems: true, includeDecorations: true }),
-      new SoundBlockAction()
+      new SoundBlockAction(),
+      // LightingAction: Adds per-sector ambient lighting based on Doom lightlevels
+      // Uncomment to enable sector lighting:
+      new LightingAction({
+        minRadius: 64,          // Minimum light radius for dark sectors
+        maxRadius: 800,         // Maximum light radius for bright sectors
+        intensityMultiplier: 1.0, // Adjust overall brightness (< 1 = dimmer, > 1 = brighter)
+        noShadows: true,        // Recommended for performance with many lights
+        color: [1, 0.95, 0.9],  // Warm white lighting
+      }),
     ]);
     processor.preprocess(rawMap);
 

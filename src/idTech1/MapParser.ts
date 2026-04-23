@@ -44,6 +44,7 @@ export class MapParser {
   subsectors: Subsector[] | null = null;
   useGlNodes = false;
   glVertexes: { x: number; y: number }[] = [];
+  metadata: Record<string, unknown> = {};
 
   constructor(public wad: WadParser) { }
 

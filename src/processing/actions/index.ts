@@ -6,3 +6,4 @@
 export { DoorAction } from './DoorAction';
 export { ThingAction } from './ThingAction';
 export { SoundBlockAction } from './SoundBlockAction';
+export { LightingAction, injectSectorLights } from './LightingAction';

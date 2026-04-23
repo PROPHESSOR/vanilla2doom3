@@ -452,28 +452,28 @@ export function generateDoom3Map(map: MapParser, options: Doom3MapOptions = {}):
   });
 
   // Player light
-  doom3Map.addEntity({
-    classname: 'light',
-    properties: {
-      name: 'light_player',
-      noshadows: '1',
-      light_radius: '4096 4096 4096',
-      origin: `${playerX} ${playerY} ${playerZ + 64}`,
-    },
-    brushes: [],
-  });
+  // doom3Map.addEntity({
+  //   classname: 'light',
+  //   properties: {
+  //     name: 'light_player',
+  //     noshadows: '1',
+  //     light_radius: '4096 4096 4096',
+  //     origin: `${playerX} ${playerY} ${playerZ + 64}`,
+  //   },
+  //   brushes: [],
+  // });
 
   // Fill light
-  doom3Map.addEntity({
-    classname: 'light',
-    properties: {
-      name: 'light_fill',
-      noshadows: '1',
-      light_radius: '4096 4096 4096',
-      origin: `${playerX} ${playerY} ${playerZ - 16}`,
-    },
-    brushes: [],
-  });
+  // doom3Map.addEntity({
+  //   classname: 'light',
+  //   properties: {
+  //     name: 'light_fill',
+  //     noshadows: '1',
+  //     light_radius: '4096 4096 4096',
+  //     origin: `${playerX} ${playerY} ${playerZ - 16}`,
+  //   },
+  //   brushes: [],
+  // });
 
   const ws = doom3Map.getWorldspawn();
   console.log(`Generated ${ws.brushes.length} total brushes`);
